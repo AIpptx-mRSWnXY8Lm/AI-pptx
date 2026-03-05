@@ -1,0 +1,30 @@
+<!-- ハンバーガーメニュー部分 -->
+<div class="nav">
+
+  <input id="drawer_input" class="drawer_hidden" type="checkbox">
+
+  <label for="drawer_input" class="drawer_open">
+    <span class="icon"></span>
+  </label>
+  <label for="drawer_input" class="nav_title">AIに貼り付けるプロンプト</label>
+
+  <nav class="nav_content">
+    <!-- ここに prompt の <pre> 全部そのまま -->
+  </nav>
+</div>
+
+<h1>AIスライド生成支援ツール</h1>
+
+<textarea class="codeinput" id="codeInput"
+  placeholder="ここに pptxgenjs のコードを貼り付けてください"></textarea>
+
+<button id="runBtn">スライド生成（PPTXダウンロード）</button>
+
+<pre id="errorBox"></pre>
+
+<div id="saveArea" style="margin-top:12px; display:flex; gap:8px;">
+  <input type="text" id="slideTitle" placeholder="タイトル">
+  <button id="saveBtn">プロンプト＆スライド保存</button>
+</div>
+
+<div id="savedList"></div>
