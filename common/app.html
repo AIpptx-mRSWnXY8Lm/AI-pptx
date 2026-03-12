@@ -1,15 +1,5 @@
-<!-- ハンバーガーメニュー部分 -->
-<div class="nav">
-
-  <input id="drawer_input" class="drawer_hidden" type="checkbox">
-
-  <label for="drawer_input" class="drawer_open">
-    <span class="icon"></span>
-  </label>
-  <label for="drawer_input" class="nav_title">AIに貼り付けるプロンプト</label>
-
-  <!-- メニュー -->
-  <nav class="nav_content">
+<h1>AIスライド生成支援ツール</h1>
+<section>
     <pre class="prompt-box" id="prompt">## 【指示】
 
 あなたはプロのプレゼンデザイナー兼JavaScriptエンジニアです。
@@ -114,28 +104,24 @@
 <textarea rows="5" placeholder="生成したいスライドの内容（テーマ・構成など）を入力" id="promput" class="promput"></textarea>
 </pre>
     <div class="AIbuttons">
-    <button onclick="copyButton()" id="copybutton">コピーする</button>
-    <button onclick="window.open('https://chatgpt.com/', '_blank', 'noopener,noreferrer')" style="margin-left:2em;">ChatGPTを開く</button>
-    <button onclick="window.open('https://claude.ai', '_blank', 'noopener,noreferrer')">Claudeを開く</button>
-    <button onclick="window.open('https://gemini.google.com/', '_blank', 'noopener,noreferrer')">Geminiを開く</button>
-    <button onclick="window.open('https://copilot.microsoft.com', '_blank', 'noopener,noreferrer')">Copilotを開く</button>
-    <button onclick="window.open('https://www.genspark.ai', '_blank', 'noopener,noreferrer')">Gensparkを開く</button>
+        <button onclick="copyButton()" id="copybutton">コピーする</button>
+        <button onclick="window.open('https://chatgpt.com/', '_blank', 'noopener,noreferrer')" style="margin-left:2em;">ChatGPTを開く</button>
+        <button onclick="window.open('https://claude.ai', '_blank', 'noopener,noreferrer')">Claudeを開く</button>
+        <button onclick="window.open('https://gemini.google.com/', '_blank', 'noopener,noreferrer')">Geminiを開く</button>
+        <button onclick="window.open('https://copilot.microsoft.com', '_blank', 'noopener,noreferrer')">Copilotを開く</button>
+        <button onclick="window.open('https://www.genspark.ai', '_blank', 'noopener,noreferrer')">Gensparkを開く</button>
     </div>
-  </nav>
-</div>
+</section>
 
-<h1>AIスライド生成支援ツール</h1>
-
-<textarea class="codeinput" id="codeInput"
-  placeholder="ここに pptxgenjs のコードを貼り付けてください"></textarea>
+<textarea class="codeinput" id="codeInput" placeholder="ここに pptxgenjs のコードを貼り付けてください"></textarea>
 
 <button id="runBtn">スライド生成（PPTXダウンロード）</button>
 
 <pre id="errorBox"></pre>
 
 <div id="saveArea">
-  <input type="text" id="slideTitle" placeholder="タイトル">
-  <button id="saveBtn">プロンプト＆スライド保存</button>
+    <input type="text" id="slideTitle" placeholder="タイトル">
+    <button id="saveBtn">プロンプト＆スライド保存</button>
 </div>
 
 <div id="savedList"></div>
