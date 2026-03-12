@@ -118,20 +118,52 @@ const runBtn = document.getElementById("runBtn");
 const codeInput = document.getElementById("codeInput");
 const errorBox = document.getElementById("errorBox");
 
-runBtn.addEventListener("click", async () => {
-
+runBtn.addEventListener("click", () => {
   errorBox.textContent = "";
 
   try {
 
-    await runPptxCode(codeInput.value);
+    const SafePptx = new Proxy(PptxGenJS, {
+      construct(target, args) {
+
+        const pres = new target(...args);
+
+        if (!pres.shapes) {
+          pres.shapes = pres.ShapeType || {};
+        }
+
+        const originalAddShape = pres.addShape.bind(pres);
+
+        pres.addShape = function(type, opt = {}) {
+
+          if (!type) {
+            throw new Error(
+              "ShapeType が未指定です\n例: slide.addShape(pptx.ShapeType.RECTANGLE,{x:1,y:1,w:1,h:1})"
+            );
+          }
+
+          opt.x ??= 0;
+          opt.y ??= 0;
+          opt.w ??= 1;
+          opt.h ??= 1;
+
+          return originalAddShape(type, opt);
+        };
+
+        return pres;
+      }
+    });
+
+    const wrapper = new Function(
+      "PptxGenJS",
+      `"use strict";\n${codeInput.value}`
+    );
+
+    wrapper(SafePptx);
 
   } catch (err) {
-
     errorBox.textContent = formatError(err, codeInput.value);
-
   }
-
 });
 
 /* ------------------------------
