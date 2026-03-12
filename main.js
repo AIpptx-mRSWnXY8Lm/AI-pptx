@@ -116,25 +116,28 @@ function formatError(err, code) {
 
   if (err.stack) {
 
-    const m = err.stack.match(/<anonymous>:(\d+):(\d+)/);
+    const m = err.stack.match(/:(\d+):(\d+)/);
 
     if (m) {
 
-      const line = Number(m[1]) - 1;
+      const line = Number(m[1]) - 2;
       const col = m[2];
-      const codeLine = code.split("\n")[line - 1] || "";
 
-      msg += `行: ${line}\n`;
-      msg += `列: ${col}\n\n`;
-      msg += `該当行:\n${codeLine}`;
+      const lines = code.split("\n");
+      const codeLine = lines[line-1] || "";
+
+      msg += `\n行: ${line}`;
+      msg += `\n列: ${col}`;
+
+      msg += `\n\n該当コード:\n${codeLine}`;
 
     }
+
   }
 
   return msg;
 
 }
-
 /* ------------------------------
    フォーカス解除
 ------------------------------ */
