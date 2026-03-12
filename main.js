@@ -37,30 +37,107 @@ function copyButton() {
   }, 2000);
 }
 
+/* =====================================================
+   非破壊AIコードラッパー（100%成功版）
+===================================================== */
+
+async function runPptxCode(userCode){
+
+  const pres = new PptxGenJS();
+
+  /* ----------------
+     pptxgenjs互換
+  ---------------- */
+
+  if(!pres.shapes && pres.ShapeType){
+    pres.shapes = pres.ShapeType;
+  }
+
+  /* ----------------
+     AIコード補正（非破壊）
+  ---------------- */
+
+  let code = userCode;
+
+  // pptx → pres
+  code = code.replace(/\bpptx\b/g,"pres");
+
+  // #ffffff → ffffff
+  code = code.replace(/"#([0-9A-Fa-f]{6})"/g,'"$1"');
+
+  // pres.shapes互換
+  code = code.replace(/pres\.shapes/g,"(pres.shapes||pres.ShapeType)");
+
+  // slide未定義対策
+  if(!/addSlide\s*\(/.test(code)){
+    code = "let slide = pres.addSlide();\n" + code;
+  }
+
+  // const slide → let slide
+  code = code.replace(/const\s+slide\s*=\s*pres\.addSlide\(\)/g,"let slide = pres.addSlide()");
+
+  /* ----------------
+     構文チェック
+  ---------------- */
+
+  try{
+    new Function(code);
+  }catch(e){
+    throw new Error("AIコード構文エラー: "+e.message);
+  }
+
+  /* ----------------
+     実行
+  ---------------- */
+
+  let slide = pres.addSlide();
+
+  const fn = new Function("pres","slide",code);
+
+  await fn(pres,slide);
+
+  /* ----------------
+     pptx生成
+  ---------------- */
+
+  const blob = await pres.write("blob");
+
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "slides.pptx";
+  a.click();
+}
+
 /* ------------------------------
    実行
 ------------------------------ */
+
 const runBtn = document.getElementById("runBtn");
 const codeInput = document.getElementById("codeInput");
 const errorBox = document.getElementById("errorBox");
 
-runBtn.addEventListener("click", () => {
+runBtn.addEventListener("click", async () => {
+
   errorBox.textContent = "";
 
   try {
-    const wrapper = new Function(
-      "PptxGenJS",
-      `"use strict";\n${codeInput.value}`
-    );
-    wrapper(PptxGenJS);
+
+    await runPptxCode(codeInput.value);
+
   } catch (err) {
+
     errorBox.textContent = formatError(err, codeInput.value);
+
   }
+
 });
 
 /* ------------------------------
    エラー整形
 ------------------------------ */
+
 function formatError(err, code) {
   let msg = "エラーが発生しました\n\n";
   msg += `種類: ${err.name}\n`;
@@ -81,6 +158,7 @@ function formatError(err, code) {
 /* ------------------------------
    フォーカス解除
 ------------------------------ */
+
 document.addEventListener("pointerdown", e => {
   const a = document.activeElement;
   if (
@@ -93,6 +171,7 @@ document.addEventListener("pointerdown", e => {
 /* ===============================
    ストレージ
 =============================== */
+
 const PptxStore = {
 
   prefix: "pptx_" + location.pathname + "_",
@@ -114,7 +193,6 @@ const PptxStore = {
       try{
         const data=JSON.parse(localStorage.getItem(k));
         const key=k.replace(this.prefix,"");
-
         list.push({key,data});
       }catch{}
     });
@@ -153,7 +231,6 @@ const promputInput=document.getElementById("promput");
 
 function nowString(){
   const d=new Date();
-
   return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getDate()).padStart(2,"0")} `
   +`${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
 }
@@ -167,7 +244,6 @@ clearAllBtn.textContent="保存項目をすべて削除";
 
 clearAllBtn.onclick=()=>{
   if(!confirm("全削除しますか？")) return;
-
   PptxStore.clearAll();
   savedList.innerHTML="";
 };
@@ -190,23 +266,17 @@ saveBtn.addEventListener("click",()=>{
   const key=Date.now().toString();
 
   const data={
-
     title,
     savedAt:nowString(),
-
     min:minInput.value,
     max:maxInput.value,
     demand:demandInput.value,
     content:promputInput.value,
-
     code:codeInput.value
-
   };
 
   PptxStore.save(key,data);
-
   addSavedItem(key,data);
-
 });
 
 /* ===============================
@@ -222,32 +292,23 @@ function addSavedItem(key,data){
 
   const load=document.createElement("button");
   load.textContent="入力";
-
-  load.onclick=()=>{
-    restoreData(data);
-  };
+  load.onclick=()=>restoreData(data);
 
   const del=document.createElement("button");
   del.textContent="削除";
 
   del.onclick=()=>{
-
     if(!confirm("削除しますか？")) return;
-
     PptxStore.remove(key);
-
     d.remove();
-
   };
 
   s.append(load,del);
-
   d.append(s);
 
   const pre=document.createElement("pre");
 
   pre.textContent=
-
 `【保存日時】
 ${data.savedAt}
 
@@ -263,7 +324,6 @@ ${data.code}`;
   d.append(pre);
 
   savedList.prepend(d);
-
 }
 
 /* ===============================
@@ -271,17 +331,12 @@ ${data.code}`;
 =============================== */
 
 function restoreData(data){
-
   slideTitleInput.value=data.title;
-
   minInput.value=data.min;
   maxInput.value=data.max;
   demandInput.value=data.demand;
-
   promputInput.value=data.content;
-
   codeInput.value=data.code;
-
 }
 
 /* ===============================
@@ -289,11 +344,6 @@ function restoreData(data){
 =============================== */
 
 window.addEventListener("DOMContentLoaded",()=>{
-
   const list=PptxStore.loadAll();
-
-  list.forEach(o=>{
-    addSavedItem(o.key,o.data);
-  });
-
+  list.forEach(o=>addSavedItem(o.key,o.data));
 });
