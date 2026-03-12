@@ -116,7 +116,7 @@ function formatError(err, code) {
 
   if (err.stack) {
 
-    const m = err.stack.match(/:(\d+):(\d+)/);
+    const m = err.stack && err.stack.match(/:(\d+):(\d+)/);
 
     if (m) {
 
@@ -160,7 +160,7 @@ document.addEventListener("pointerdown", e => {
 
 const PptxStore = {
 
-  prefix: "pptx_" + location.pathname + "_",
+  prefix: "pptx_store_",
 
   makeKey(key){
     return this.prefix + key;
