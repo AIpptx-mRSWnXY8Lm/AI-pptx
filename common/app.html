@@ -1,5 +1,6 @@
 <h1>AIスライド生成支援ツール</h1>
 <section>
+    <h2>プロンプト作成</h2>
     <pre class="prompt-box" id="prompt">## 【指示】
 
 あなたはプロのプレゼンデザイナー兼JavaScriptエンジニアです。
@@ -112,16 +113,18 @@
         <button onclick="window.open('https://www.genspark.ai', '_blank', 'noopener,noreferrer')">Gensparkを開く</button>
     </div>
 </section>
-
-<textarea class="codeinput" id="codeInput" placeholder="ここに pptxgenjs のコードを貼り付けてください"></textarea>
-
-<button id="runBtn">スライド生成（PPTXダウンロード）</button>
-
-<pre id="errorBox"></pre>
-
-<div id="saveArea">
-    <input type="text" id="slideTitle" placeholder="タイトル">
-    <button id="saveBtn">プロンプト＆スライド保存</button>
-</div>
-
-<div id="savedList"></div>
+<section>
+    <h2>PowerPoint生成＆ダウンロード</h2>
+    <textarea class="codeinput" id="codeInput" placeholder="ここに pptxgenjs のコードを貼り付けてください"></textarea>
+    
+    <button id="runBtn">スライド生成（PPTXダウンロード）</button>
+    
+    <pre id="errorBox"></pre>
+    
+    <div id="saveArea">
+        <input type="text" id="slideTitle" placeholder="タイトル">
+        <button id="saveBtn">プロンプト＆スライド保存</button>
+    </div>
+    
+    <div id="savedList"></div>
+</section>
