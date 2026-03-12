@@ -38,7 +38,7 @@ function copyButton() {
 }
 
 /* ------------------------------
-   実行 & エラーハンドリング
+   実行
 ------------------------------ */
 const runBtn = document.getElementById("runBtn");
 const codeInput = document.getElementById("codeInput");
@@ -91,126 +91,209 @@ document.addEventListener("pointerdown", e => {
 }, true);
 
 /* ===============================
-   pptx 保存専用ストレージ
+   ストレージ
 =============================== */
 const PptxStore = {
+
   prefix: "pptx_" + location.pathname + "_",
 
-  save(key, data) {
-    localStorage.setItem(this.prefix + key, JSON.stringify(data));
+  makeKey(key){
+    return this.prefix + key;
   },
 
-  loadAll() {
-    return Object.keys(localStorage)
-      .filter(k => k.startsWith(this.prefix))
-      .map(k => {
-        try {
-          return { key: k, data: JSON.parse(localStorage.getItem(k)) };
-        } catch {
-          return null;
-        }
-      })
-      .filter(Boolean);
+  save(key,data){
+    localStorage.setItem(this.makeKey(key),JSON.stringify(data));
   },
 
-  remove(key) {
-    localStorage.removeItem(key);
+  loadAll(){
+    const list=[];
+
+    Object.keys(localStorage).forEach(k=>{
+      if(!k.startsWith(this.prefix)) return;
+
+      try{
+        const data=JSON.parse(localStorage.getItem(k));
+        const key=k.replace(this.prefix,"");
+
+        list.push({key,data});
+      }catch{}
+    });
+
+    return list.sort((a,b)=>b.key-a.key);
   },
 
-  clearAll() {
+  remove(key){
+    localStorage.removeItem(this.makeKey(key));
+  },
+
+  clearAll(){
     Object.keys(localStorage)
-      .filter(k => k.startsWith(this.prefix))
-      .forEach(k => localStorage.removeItem(k));
+    .filter(k=>k.startsWith(this.prefix))
+    .forEach(k=>localStorage.removeItem(k));
   }
+
 };
 
 /* ===============================
-   保存・復元
+   DOM
 =============================== */
-function nowString() {
-  const d = new Date();
-  return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getDate()).padStart(2,"0")} ` +
-         `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+
+const slideTitleInput=document.getElementById("slideTitle");
+const saveBtn=document.getElementById("saveBtn");
+const savedList=document.getElementById("savedList");
+
+const minInput=document.getElementById("min");
+const maxInput=document.getElementById("max");
+const demandInput=document.getElementById("demand");
+const promputInput=document.getElementById("promput");
+
+/* ===============================
+   日付
+=============================== */
+
+function nowString(){
+  const d=new Date();
+
+  return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getDate()).padStart(2,"0")} `
+  +`${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
 }
 
-const slideTitleInput = document.getElementById("slideTitle");
-const saveBtn = document.getElementById("saveBtn");
-const savedList = document.getElementById("savedList");
+/* ===============================
+   全削除
+=============================== */
 
-/* 一括削除 */
-const clearAllBtn = document.createElement("button");
-clearAllBtn.textContent = "保存項目をすべて削除";
-clearAllBtn.onclick = () => {
-  if (!confirm("全削除しますか？")) return;
+const clearAllBtn=document.createElement("button");
+clearAllBtn.textContent="保存項目をすべて削除";
+
+clearAllBtn.onclick=()=>{
+  if(!confirm("全削除しますか？")) return;
+
   PptxStore.clearAll();
-  savedList.innerHTML = "";
+  savedList.innerHTML="";
 };
+
 savedList.before(clearAllBtn);
 
-/* 保存 */
-saveBtn.addEventListener("click", () => {
-  const title = slideTitleInput.value.trim();
-  if (!title) {
+/* ===============================
+   保存
+=============================== */
+
+saveBtn.addEventListener("click",()=>{
+
+  const title=slideTitleInput.value.trim();
+
+  if(!title){
     alert("タイトルを入力してください");
     return;
   }
 
-  const key = Date.now().toString(); // ★ 常に一意
+  const key=Date.now().toString();
 
-  const data = {
+  const data={
+
     title,
-    savedAt: nowString(),
-    min: min.value,
-    max: max.value,
-    demand: demand.value,
-    content: promput.value,
-    code: codeInput.value
+    savedAt:nowString(),
+
+    min:minInput.value,
+    max:maxInput.value,
+    demand:demandInput.value,
+    content:promputInput.value,
+
+    code:codeInput.value
+
   };
 
-  PptxStore.save(key, data);
-  addSavedItem(key, data);
+  PptxStore.save(key,data);
+
+  addSavedItem(key,data);
+
 });
 
-/* 表示 */
-function addSavedItem(key, data) {
-  const d = document.createElement("details");
-  const s = document.createElement("summary");
-  s.textContent = `${data.title}（${data.savedAt}）`;
+/* ===============================
+   表示
+=============================== */
 
-  const load = document.createElement("button");
-  load.textContent = "入力";
-  load.onclick = () => restoreData(data);
+function addSavedItem(key,data){
 
-  const del = document.createElement("button");
-  del.textContent = "削除";
-  del.onclick = () => {
-    if (!confirm("削除しますか？")) return;
-    PptxStore.remove(key);
-    d.remove();
+  const d=document.createElement("details");
+
+  const s=document.createElement("summary");
+  s.textContent=`${data.title}（${data.savedAt}）`;
+
+  const load=document.createElement("button");
+  load.textContent="入力";
+
+  load.onclick=()=>{
+    restoreData(data);
   };
 
-  s.append(load, del);
+  const del=document.createElement("button");
+  del.textContent="削除";
+
+  del.onclick=()=>{
+
+    if(!confirm("削除しますか？")) return;
+
+    PptxStore.remove(key);
+
+    d.remove();
+
+  };
+
+  s.append(load,del);
+
   d.append(s);
 
-  const pre = document.createElement("pre");
-  pre.textContent =
-    `【保存日時】\n${data.savedAt}\n\n【その他条件】\n${data.demand}\n\n【スライド内容】\n${data.content}\n\n【コード】\n${data.code}`;
+  const pre=document.createElement("pre");
+
+  pre.textContent=
+
+`【保存日時】
+${data.savedAt}
+
+【その他条件】
+${data.demand}
+
+【スライド内容】
+${data.content}
+
+【コード】
+${data.code}`;
 
   d.append(pre);
+
   savedList.prepend(d);
+
 }
 
-/* 復元 */
-function restoreData(data) {
-  slideTitleInput.value = data.title;
-  min.value = data.min;
-  max.value = data.max;
-  demand.value = data.demand;
-  promput.value = data.content;
-  codeInput.value = data.code;
+/* ===============================
+   復元
+=============================== */
+
+function restoreData(data){
+
+  slideTitleInput.value=data.title;
+
+  minInput.value=data.min;
+  maxInput.value=data.max;
+  demandInput.value=data.demand;
+
+  promputInput.value=data.content;
+
+  codeInput.value=data.code;
+
 }
 
-/* 初期復元 */
-window.addEventListener("DOMContentLoaded", () => {
-  PptxStore.loadAll().forEach(o => addSavedItem(o.key, o.data));
+/* ===============================
+   初期復元
+=============================== */
+
+window.addEventListener("DOMContentLoaded",()=>{
+
+  const list=PptxStore.loadAll();
+
+  list.forEach(o=>{
+    addSavedItem(o.key,o.data);
+  });
+
 });
