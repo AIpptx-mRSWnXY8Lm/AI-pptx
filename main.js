@@ -94,7 +94,7 @@ document.addEventListener("pointerdown", e => {
    pptx 保存専用ストレージ
 =============================== */
 const PptxStore = {
-  prefix: "pptx_",
+  prefix: "pptx_" + location.pathname + "_",
 
   save(key, data) {
     localStorage.setItem(this.prefix + key, JSON.stringify(data));
