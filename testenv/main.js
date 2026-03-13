@@ -410,75 +410,42 @@ function init() {
   /* ----------------------------------------------------------------
      コードを実行する
      PptxGenJS はグローバルのままユーザーコードに使わせる。
-     previewMode=true のとき writeFile() をフックして Blob を返す。
+     writeFile() → write({outputType:'arraybuffer'}) に差し替え、
+     ArrayBuffer を返す。プレビューはこの値から JSZip で描画する。
   ---------------------------------------------------------------- */
-  function runCode(code, previewMode = false) {
+
+  // ユーザーコード中の writeFile 呼び出しを write(arraybuffer) に差し替え
+  function patchWriteFile(code) {
+    return code
+      .replace(
+        /\bpres\.writeFile\s*\(\s*\{[^}]*\}\s*\)/g,
+        "pres.write({ outputType: 'arraybuffer' })"
+      )
+      .replace(
+        /\bpres\.writeFile\s*\(\s*\)/g,
+        "pres.write({ outputType: 'arraybuffer' })"
+      );
+  }
+
+  function runCode(code) {
+    const patchedCode = patchWriteFile(code);
     return new Promise((resolve, reject) => {
-
-      if (previewMode) {
-        const proto = PptxGenJS.prototype;
-        const _origWriteFile = proto.writeFile;
-        let resolved = false;
-
-        proto.writeFile = function() {
-          return this.write({ outputType: "arraybuffer" }).then(ab => {
-            const blob = new Blob([ab], {
-              type: "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-            });
-            if (!resolved) { resolved = true; resolve(blob); }
-          });
-        };
-
-        applyPptxPatch();
-        let result;
-        try {
-          const fn = new Function(`"use strict";\n${code}`);
-          result = fn();
-        } catch (err) {
-          proto.writeFile = _origWriteFile;
-          removePptxPatch();
-          reject(err);
-          return;
-        }
-
-        const cleanup = () => {
-          proto.writeFile = _origWriteFile;
-          removePptxPatch();
-        };
-
-        const waitForBlob = (p) => {
-          p.then(() => { cleanup(); if (!resolved) { resolved = true; resolve(null); } })
-           .catch(e => { cleanup(); reject(e); });
-        };
-
-        if (result && typeof result.then === "function") {
-          waitForBlob(result);
-        } else {
-          // writeFile の非同期完了を少し待つ
-          setTimeout(() => {
-            cleanup();
-            if (!resolved) { resolved = true; resolve(null); }
-          }, 500);
-        }
-
+      let result;
+      applyPptxPatch();
+      try {
+        const fn = new Function(`"use strict";\n${patchedCode}`);
+        result = fn();
+      } catch (err) {
+        removePptxPatch();
+        reject(err);
+        return;
+      }
+      if (result && typeof result.then === "function") {
+        result.then(v => { removePptxPatch(); resolve(v); })
+              .catch(e => { removePptxPatch(); reject(e); });
       } else {
-        let result;
-        applyPptxPatch();
-        try {
-          const fn = new Function(`"use strict";\n${code}`);
-          result = fn();
-        } catch (err) {
-          removePptxPatch();
-          reject(err);
-          return;
-        }
-        if (result && typeof result.then === "function") {
-          result.then(v => { removePptxPatch(); resolve(v); })
-                .catch(e => { removePptxPatch(); reject(e); });
-        } else {
-          removePptxPatch();
-          resolve(result);
-        }
+        removePptxPatch();
+        resolve(result);
       }
     });
   }
@@ -491,60 +458,31 @@ function init() {
        - 各 fix は必ずオリジナルコードをベースとして適用する
        - 複数の fix が必要な場合は、全 fix を適用した合成コードも試す
   ---------------------------------------------------------------- */
-  /* ----------------------------------------------------------------
-     プレビュー表示ユーティリティ
-  ---------------------------------------------------------------- */
-  const previewArea     = document.getElementById("previewArea");
-  const previewFrame    = document.getElementById("previewFrame");
-  const previewTopBar   = document.getElementById("previewTopBar");
-  const previewBottomBar= document.getElementById("previewBottomBar");
-  const downloadBtnTop  = document.getElementById("downloadBtnTop");
-  const downloadBtnBottom = document.getElementById("downloadBtnBottom");
+  runBtn.addEventListener("click", async () => {
 
-  let _currentBlobUrl = null; // 現在のプレビュー用 Blob URL
+    errorBox.textContent = "";
+    errorBox.style.color = "";
+    runBtn.disabled = true;
+    runBtn.textContent = "実行中…";
 
-  function showPreview(blob) {
-    // 既存 URL を解放
-    if (_currentBlobUrl) {
-      URL.revokeObjectURL(_currentBlobUrl);
-      _currentBlobUrl = null;
-    }
+    // プレビューエリアをリセット
+    document.getElementById("previewArea").style.display = "none";
+    document.getElementById("pptxViewer").innerHTML = "";
 
-    _currentBlobUrl = URL.createObjectURL(blob);
-
-    // iframe に直接 pptx を表示するため Google Docs Viewer を使用
-    const viewerUrl =
-      "https://docs.google.com/gview?embedded=true&url=" +
-      encodeURIComponent(_currentBlobUrl);
-
-    previewFrame.src = viewerUrl;
-    previewArea.style.display  = "block";
-    previewTopBar.style.display = "block";
-    previewBottomBar.style.display = "block";
-
-    // ダウンロードボタンの動作を設定
-    const doDownload = () => {
-      const a = document.createElement("a");
-      a.href = _currentBlobUrl;
-      a.download = (document.getElementById("slideTitle").value.trim() || "slide") + ".pptx";
-      a.click();
-    };
-    downloadBtnTop.onclick    = doDownload;
-    downloadBtnBottom.onclick = doDownload;
-  }
-
-  /* ----------------------------------------------------------------
-     実行ボタン（自動修正ロジック込み）
-  ---------------------------------------------------------------- */
-  async function executeWithAutoFix(originalCode) {
+    const originalCode = codeInput.value; // textarea は絶対に変更しない
+    let lastErr  = null;
+    let fixLog   = [];
+    let pptxArrayBuffer = null;
 
     // Step 1: まずオリジナルをそのまま試す
     try {
-      const blob = await runCode(originalCode, true);
-      if (blob) showPreview(blob);
-      return { success: true, appliedLabels: [] };
+      pptxArrayBuffer = await runCode(originalCode);
+      runBtn.disabled = false;
+      runBtn.textContent = "▶ スライド生成＆プレビュー";
+      if (pptxArrayBuffer) await showPptxPreview(pptxArrayBuffer, originalCode);
+      return;
     } catch (err) {
-      var lastErr = err;
+      lastErr = err;
     }
 
     // Step 2: 各 fix を「オリジナルコードに対して」単独で試す
@@ -553,11 +491,12 @@ function init() {
 
     for (const fix of AUTO_FIXES) {
       if (!fix.pattern.test(originalCode)) continue;
+
       const candidate = fix.fix(originalCode);
       if (candidate === originalCode) continue;
+
       try {
-        const blob = await runCode(candidate, true);
-        if (blob) showPreview(blob);
+        pptxArrayBuffer = await runCode(candidate);
         succeededCode = candidate;
         appliedLabels.push(fix.label);
         lastErr = null;
@@ -567,10 +506,11 @@ function init() {
       }
     }
 
-    // Step 3: 合成 fix
+    // Step 3: 単独 fix で成功しなかった場合、全 fix を重ね掛けして試す
     if (!succeededCode) {
       let combined = originalCode;
       const combinedLabels = [];
+
       for (const fix of AUTO_FIXES) {
         if (!fix.pattern.test(combined)) continue;
         const next = fix.fix(combined);
@@ -578,10 +518,10 @@ function init() {
         combined = next;
         combinedLabels.push(fix.label);
       }
+
       if (combinedLabels.length > 0 && combined !== originalCode) {
         try {
-          const blob = await runCode(combined, true);
-          if (blob) showPreview(blob);
+          pptxArrayBuffer = await runCode(combined);
           succeededCode = combined;
           appliedLabels.push(...combinedLabels);
           lastErr = null;
@@ -591,32 +531,18 @@ function init() {
       }
     }
 
-    return { success: !!succeededCode, appliedLabels, lastErr };
-  }
-
-  runBtn.addEventListener("click", async () => {
-
-    errorBox.textContent = "";
-    errorBox.style.color = "";
-    runBtn.disabled = true;
-    runBtn.textContent = "生成中…";
-
-    const originalCode = codeInput.value;
-    const { success, appliedLabels, lastErr } = await executeWithAutoFix(originalCode);
-
     runBtn.disabled = false;
-    runBtn.textContent = "スライド生成＆プレビュー";
+    runBtn.textContent = "▶ スライド生成＆プレビュー";
 
-    if (success) {
-      if (appliedLabels.length > 0) {
-        errorBox.style.color = "#16a34a";
-        errorBox.textContent =
-          `✅ 自動修正でエラーを解決しました。\n適用した修正: ${appliedLabels.join(" + ")}`;
-        setTimeout(() => {
-          errorBox.textContent = "";
-          errorBox.style.color = "";
-        }, 6000);
-      }
+    if (succeededCode) {
+      errorBox.style.color = "#16a34a";
+      errorBox.textContent =
+        `✅ 自動修正でエラーを解決しました。\n適用した修正: ${appliedLabels.join(" + ")}`;
+      setTimeout(() => {
+        errorBox.textContent = "";
+        errorBox.style.color = "";
+      }, 6000);
+      if (pptxArrayBuffer) await showPptxPreview(pptxArrayBuffer, succeededCode);
     } else {
       let msg = formatError(lastErr, originalCode);
       if (appliedLabels.length > 0) {
@@ -627,9 +553,481 @@ function init() {
 
   });
 
-  /* ------------------------------
+  /* ================================================================
+     PPTX プレビューエンジン
+     ノウハウ: JSZip で ArrayBuffer を解凍 → slide*.xml をパース
+               → CSS transform:scale で縮小表示
+               前後にダウンロードボタンを設置
+  ================================================================ */
+
+  // ファイル名をコードから取得するヘルパー
+  function extractFileName(code) {
+    const m = code.match(/fileName\s*:\s*['"]([^'"]+\.pptx)['"]/);
+    return m ? m[1] : "presentation.pptx";
+  }
+
+  // ArrayBuffer → Blob → ダウンロード
+  function downloadPptx(arrayBuffer, fileName) {
+    const blob = new Blob([arrayBuffer], {
+      type: "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
+
+  // ダウンロードボタン生成
+  function makeDownloadBtn(arrayBuffer, fileName) {
+    const btn = document.createElement("button");
+    btn.textContent = "⬇ PPTXをダウンロード";
+    btn.style.cssText = [
+      "display:inline-block",
+      "margin:8px 0",
+      "padding:10px 22px",
+      "font-size:16px",
+      "background:#2563eb",
+      "color:#fff",
+      "border:none",
+      "border-radius:6px",
+      "cursor:pointer",
+    ].join(";");
+    btn.onmouseenter = () => btn.style.background = "#1d4ed8";
+    btn.onmouseleave = () => btn.style.background = "#2563eb";
+    btn.onclick = () => downloadPptx(arrayBuffer, fileName);
+    return btn;
+  }
+
+  // EMU → px 変換（96dpi 換算）
+  function emuToPx(val) {
+    if (!val) return 0;
+    return parseInt(val) / 914400 * 96;
+  }
+
+  // OOXML の色ノードから CSS カラーを取得
+  function parseOoxmlColor(node) {
+    if (!node) return null;
+    const srgb = node.querySelector("srgbClr");
+    if (srgb) return "#" + srgb.getAttribute("val");
+    const prstClr = node.querySelector("prstClr");
+    if (prstClr) {
+      const map = {
+        white:"#ffffff", black:"#000000", red:"#ff0000",
+        blue:"#0000ff", green:"#008000", yellow:"#ffff00",
+        gray:"#808080", grey:"#808080", orange:"#ffa500",
+        cyan:"#00ffff", magenta:"#ff00ff", darkBlue:"#00008b",
+        darkGray:"#a9a9a9", lightGray:"#d3d3d3",
+      };
+      return map[prstClr.getAttribute("val")] || "#888888";
+    }
+    return null;
+  }
+
+  // 1枚のスライド XML を DOM に変換して返す
+  function renderSlideXml(xmlStr, containerW, containerH, slideW, slideH) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xmlStr, "text/xml");
+    const scale = Math.min(containerW / slideW, containerH / slideH);
+
+    const wrapper = document.createElement("div");
+    wrapper.style.cssText = `
+      width:${containerW}px;height:${containerH}px;
+      position:relative;overflow:hidden;background:#f8fafc;
+    `.trim();
+
+    const inner = document.createElement("div");
+    inner.style.cssText = `
+      width:${slideW}px;height:${slideH}px;
+      position:absolute;
+      top:${(containerH - slideH * scale) / 2}px;
+      left:${(containerW - slideW * scale) / 2}px;
+      transform:scale(${scale});transform-origin:top left;
+      overflow:hidden;background:#fff;
+    `.trim();
+
+    // 背景色
+    const bgSolid = doc.querySelector("bg solidFill");
+    if (bgSolid) {
+      const c = parseOoxmlColor(bgSolid);
+      if (c) inner.style.background = c;
+    }
+    const bgGrad = doc.querySelector("bg gradFill");
+    if (bgGrad) {
+      const stops = [...bgGrad.querySelectorAll("gs")].map(gs => {
+        const pos = parseInt(gs.getAttribute("pos") || 0) / 1000;
+        return `${parseOoxmlColor(gs) || "#fff"} ${pos}%`;
+      });
+      if (stops.length > 1) inner.style.background = `linear-gradient(135deg,${stops.join(",")})`;
+    }
+
+    // 図形ツリー
+    const spTree = doc.querySelector("spTree");
+    if (spTree) {
+      for (const sp of spTree.querySelectorAll("sp,cxnSp")) {
+        renderOoxmlShape(sp, inner);
+      }
+    }
+
+    wrapper.appendChild(inner);
+    return wrapper;
+  }
+
+  // 1つの図形要素を描画
+  function renderOoxmlShape(sp, container) {
+    const xfrm = sp.querySelector("xfrm");
+    if (!xfrm) return;
+    const off = xfrm.querySelector("off");
+    const ext = xfrm.querySelector("ext");
+    if (!off || !ext) return;
+
+    const x = emuToPx(off.getAttribute("x"));
+    const y = emuToPx(off.getAttribute("y"));
+    const w = emuToPx(ext.getAttribute("cx"));
+    const h = emuToPx(ext.getAttribute("cy"));
+
+    const el = document.createElement("div");
+    el.style.cssText = `
+      position:absolute;left:${x}px;top:${y}px;
+      width:${w}px;height:${h}px;overflow:hidden;box-sizing:border-box;
+    `.trim();
+
+    // 図形スタイル
+    const spPr = sp.querySelector("spPr");
+    if (spPr) {
+      // 塗りつぶし
+      const solid = spPr.querySelector(":scope > solidFill");
+      if (solid) {
+        const c = parseOoxmlColor(solid);
+        if (c) el.style.background = c;
+      }
+      const noFill = spPr.querySelector(":scope > noFill");
+      if (noFill) el.style.background = "transparent";
+
+      // グラデーション
+      const grad = spPr.querySelector(":scope > gradFill");
+      if (grad) {
+        const stops = [...grad.querySelectorAll("gs")].map(gs => {
+          const pos = parseInt(gs.getAttribute("pos") || 0) / 1000;
+          return `${parseOoxmlColor(gs) || "#fff"} ${pos}%`;
+        });
+        const ang = grad.querySelector("lin");
+        const deg = ang ? (parseInt(ang.getAttribute("ang") || 0) / 60000) : 90;
+        if (stops.length > 1) el.style.background = `linear-gradient(${deg}deg,${stops.join(",")})`;
+      }
+
+      // ボーダー
+      const ln = spPr.querySelector(":scope > ln");
+      if (ln) {
+        const lnSolid = ln.querySelector("solidFill");
+        if (lnSolid) {
+          const lc = parseOoxmlColor(lnSolid);
+          const lw = Math.max(1, emuToPx(ln.getAttribute("w") || "9144"));
+          if (lc) el.style.border = `${lw}px solid ${lc}`;
+        }
+        if (ln.querySelector("noFill")) el.style.border = "none";
+      }
+
+      // 角丸
+      const geom = spPr.querySelector("prstGeom");
+      if (geom && geom.getAttribute("prst") === "roundRect") el.style.borderRadius = "8px";
+      if (geom && geom.getAttribute("prst") === "ellipse") el.style.borderRadius = "50%";
+    }
+
+    // テキスト
+    const txBody = sp.querySelector("txBody");
+    if (txBody) {
+      el.style.display = "flex";
+      el.style.flexDirection = "column";
+
+      const bodyPr = txBody.querySelector("bodyPr");
+      if (bodyPr) {
+        const anchor = bodyPr.getAttribute("anchor");
+        if (anchor === "ctr") el.style.justifyContent = "center";
+        else if (anchor === "b") el.style.justifyContent = "flex-end";
+
+        // 内側マージン
+        const tIns = emuToPx(bodyPr.getAttribute("tIns") ?? "45720");
+        const bIns = emuToPx(bodyPr.getAttribute("bIns") ?? "45720");
+        const lIns = emuToPx(bodyPr.getAttribute("lIns") ?? "91440");
+        const rIns = emuToPx(bodyPr.getAttribute("rIns") ?? "91440");
+        el.style.padding = `${tIns}px ${rIns}px ${bIns}px ${lIns}px`;
+      }
+
+      const textDiv = document.createElement("div");
+      for (const para of txBody.querySelectorAll("p")) {
+        const pEl = document.createElement("p");
+        pEl.style.margin = "0";
+
+        const pPr = para.querySelector("pPr");
+        if (pPr) {
+          const algn = pPr.getAttribute("algn");
+          if (algn === "ctr") pEl.style.textAlign = "center";
+          else if (algn === "r") pEl.style.textAlign = "right";
+          else if (algn === "just") pEl.style.textAlign = "justify";
+          const spcBef = pPr.querySelector("spcBef spcPts");
+          if (spcBef) pEl.style.marginTop = (parseInt(spcBef.getAttribute("val") || 0) / 100) + "pt";
+        }
+
+        const runs = [...para.querySelectorAll("r,a\\:br,br")];
+        if (runs.length === 0) {
+          pEl.innerHTML = "&nbsp;";
+        } else {
+          for (const run of runs) {
+            const tag = run.tagName.replace(/^.*:/, "");
+            if (tag === "br") { pEl.appendChild(document.createElement("br")); continue; }
+            const t = run.querySelector("t");
+            if (!t) continue;
+            const span = document.createElement("span");
+            span.textContent = t.textContent;
+            const rPr = run.querySelector("rPr");
+            if (rPr) {
+              const sz = rPr.getAttribute("sz");
+              if (sz) span.style.fontSize = (parseInt(sz) / 100) + "pt";
+              if (rPr.getAttribute("b") === "1") span.style.fontWeight = "bold";
+              if (rPr.getAttribute("i") === "1") span.style.fontStyle = "italic";
+              const u = rPr.getAttribute("u");
+              if (u && u !== "none") span.style.textDecoration = "underline";
+              const rSolid = rPr.querySelector("solidFill");
+              if (rSolid) { const rc = parseOoxmlColor(rSolid); if (rc) span.style.color = rc; }
+              const latin = rPr.querySelector("latin");
+              if (latin) span.style.fontFamily = `"${latin.getAttribute("typeface")}",sans-serif`;
+            }
+            pEl.appendChild(span);
+          }
+        }
+        textDiv.appendChild(pEl);
+      }
+      el.appendChild(textDiv);
+    }
+
+    container.appendChild(el);
+  }
+
+  // メインのプレビュー表示関数
+  async function showPptxPreview(arrayBuffer, code) {
+    const previewArea     = document.getElementById("previewArea");
+    const viewerEl        = document.getElementById("pptxViewer");
+    const downloadTopEl   = document.getElementById("previewDownloadTop");
+    const downloadBottomEl= document.getElementById("previewDownloadBottom");
+
+    const fileName = extractFileName(code);
+
+    // ダウンロードボタン（上下）を設置
+    downloadTopEl.innerHTML = "";
+    downloadBottomEl.innerHTML = "";
+    downloadTopEl.appendChild(makeDownloadBtn(arrayBuffer, fileName));
+    downloadBottomEl.appendChild(makeDownloadBtn(arrayBuffer, fileName));
+
+    // JSZip で解凍
+    let zip;
+    try {
+      zip = await JSZip.loadAsync(arrayBuffer);
+    } catch (e) {
+      viewerEl.textContent = "プレビューの読み込みに失敗しました: " + e.message;
+      previewArea.style.display = "block";
+      return;
+    }
+
+    // スライドサイズ取得
+    let slideW = 9144000 / 914400 * 96; // LAYOUT_WIDE: 12192000 EMU
+    let slideH = 6858000 / 914400 * 96;
+    try {
+      const presXml = await zip.file("ppt/presentation.xml").async("text");
+      const presDoc = new DOMParser().parseFromString(presXml, "text/xml");
+      const sldSz = presDoc.querySelector("sldSz");
+      if (sldSz) {
+        slideW = emuToPx(sldSz.getAttribute("cx"));
+        slideH = emuToPx(sldSz.getAttribute("cy"));
+      }
+    } catch(e) {}
+
+    // スライドXMLファイルを順番に取得
+    const slideFiles = Object.keys(zip.files)
+      .filter(f => /^ppt\/slides\/slide\d+\.xml$/.test(f))
+      .sort((a, b) => {
+        const na = parseInt(a.match(/\d+/)[0]);
+        const nb = parseInt(b.match(/\d+/)[0]);
+        return na - nb;
+      });
+
+    if (slideFiles.length === 0) {
+      viewerEl.textContent = "スライドが見つかりませんでした。";
+      previewArea.style.display = "block";
+      return;
+    }
+
+    // ビューワー UI を構築
+    viewerEl.innerHTML = "";
+    viewerEl.style.cssText = [
+      "border:1px solid #e2e8f0",
+      "border-radius:8px",
+      "overflow:hidden",
+      "background:#1e293b",
+      "margin:8px 0",
+    ].join(";");
+
+    // スライド一覧サムネイル + メイン表示 の 2ペイン構造
+    const layout = document.createElement("div");
+    layout.style.cssText = "display:flex;height:560px;";
+
+    // --- サイドバー（サムネイル） ---
+    const sidebar = document.createElement("div");
+    sidebar.style.cssText = [
+      "width:160px;min-width:160px",
+      "background:#0f172a",
+      "overflow-y:auto",
+      "padding:10px 8px",
+      "display:flex;flex-direction:column;gap:8px",
+      "border-right:1px solid #334155",
+    ].join(";");
+    sidebar.style.scrollbarWidth = "thin";
+    sidebar.style.scrollbarColor = "#334155 transparent";
+
+    // --- メイン表示エリア ---
+    const mainArea = document.createElement("div");
+    mainArea.style.cssText = [
+      "flex:1;display:flex;flex-direction:column",
+      "align-items:center;justify-content:center",
+      "background:#1e293b;gap:12px;padding:16px",
+    ].join(";");
+
+    const slideContainer = document.createElement("div");
+    slideContainer.style.cssText = [
+      "background:#fff;border-radius:6px",
+      "box-shadow:0 8px 32px rgba(0,0,0,0.5)",
+      "overflow:hidden;flex-shrink:0",
+    ].join(";");
+
+    // ナビゲーション
+    const nav = document.createElement("div");
+    nav.style.cssText = "display:flex;align-items:center;gap:12px;";
+
+    const makeNavBtn = (label) => {
+      const b = document.createElement("button");
+      b.textContent = label;
+      b.style.cssText = [
+        "background:#334155;color:#e2e8f0;border:none",
+        "width:34px;height:34px;border-radius:6px",
+        "font-size:18px;cursor:pointer;",
+      ].join(";");
+      b.onmouseenter = () => b.style.background = "#4f46e5";
+      b.onmouseleave = () => b.style.background = "#334155";
+      return b;
+    };
+    const prevBtn2 = makeNavBtn("‹");
+    const nextBtn2 = makeNavBtn("›");
+    const navInfo2 = document.createElement("span");
+    navInfo2.style.cssText = "color:#94a3b8;font-size:13px;min-width:70px;text-align:center;font-family:monospace;";
+
+    nav.append(prevBtn2, navInfo2, nextBtn2);
+    mainArea.append(slideContainer, nav);
+
+    layout.append(sidebar, mainArea);
+    viewerEl.appendChild(layout);
+    previewArea.style.display = "block";
+
+    // スライドデータを読み込んでサムネイルとメイン表示を生成
+    const THUMB_W = 144, THUMB_H = Math.round(144 * slideH / slideW);
+    const MAIN_H  = 420,  MAIN_W  = Math.round(420 * slideW / slideH);
+    let currentIdx = 0;
+    const xmlCache = {};
+
+    async function loadSlideXml(idx) {
+      if (xmlCache[idx] !== undefined) return xmlCache[idx];
+      try {
+        const xml = await zip.file(slideFiles[idx]).async("text");
+        xmlCache[idx] = xml;
+        return xml;
+      } catch(e) { return null; }
+    }
+
+    async function showMainSlide(idx) {
+      currentIdx = idx;
+      const xml = await loadSlideXml(idx);
+      if (!xml) return;
+
+      slideContainer.innerHTML = "";
+      slideContainer.style.width  = MAIN_W + "px";
+      slideContainer.style.height = MAIN_H + "px";
+      const rendered = renderSlideXml(xml, MAIN_W, MAIN_H, slideW, slideH);
+      rendered.style.cssText += "width:100%;height:100%;";
+      slideContainer.appendChild(rendered);
+
+      navInfo2.textContent = `${idx + 1} / ${slideFiles.length}`;
+      prevBtn2.disabled = idx === 0;
+      nextBtn2.disabled = idx === slideFiles.length - 1;
+      prevBtn2.style.opacity = idx === 0 ? "0.3" : "1";
+      nextBtn2.style.opacity = idx === slideFiles.length - 1 ? "0.3" : "1";
+
+      // サムネイルのアクティブ状態を更新
+      sidebar.querySelectorAll(".pv-thumb").forEach((t, i) => {
+        t.style.borderColor = i === idx ? "#4f46e5" : "transparent";
+      });
+      sidebar.querySelectorAll(".pv-thumb")[idx]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+
+    prevBtn2.onclick = () => { if (currentIdx > 0) showMainSlide(currentIdx - 1); };
+    nextBtn2.onclick = () => { if (currentIdx < slideFiles.length - 1) showMainSlide(currentIdx + 1); };
+
+    // キーボード操作（プレビューエリアにフォーカスが当たっているときのみ）
+    viewerEl.setAttribute("tabindex", "0");
+    viewerEl.onkeydown = (e) => {
+      if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); nextBtn2.click(); }
+      if (e.key === "ArrowLeft"  || e.key === "ArrowUp")   { e.preventDefault(); prevBtn2.click(); }
+    };
+
+    // サムネイルを非同期で順番に描画
+    for (let i = 0; i < slideFiles.length; i++) {
+      const thumb = document.createElement("div");
+      thumb.className = "pv-thumb";
+      thumb.style.cssText = [
+        `width:${THUMB_W}px;height:${THUMB_H}px`,
+        "border-radius:4px;overflow:hidden",
+        "border:2px solid transparent",
+        "cursor:pointer;flex-shrink:0",
+        "background:#fff;position:relative",
+        "transition:border-color .15s",
+      ].join(";");
+
+      const numLabel = document.createElement("div");
+      numLabel.textContent = i + 1;
+      numLabel.style.cssText = [
+        "position:absolute;bottom:3px;right:5px",
+        "font-size:10px;color:#94a3b8",
+        "background:rgba(15,23,42,.75)",
+        "padding:1px 4px;border-radius:3px;z-index:2",
+        "font-family:monospace",
+      ].join(";");
+
+      const idx = i; // クロージャ用
+      thumb.onclick = () => showMainSlide(idx);
+      thumb.onmouseenter = () => { if (idx !== currentIdx) thumb.style.borderColor = "#6366f1"; };
+      thumb.onmouseleave = () => { if (idx !== currentIdx) thumb.style.borderColor = "transparent"; };
+      thumb.append(numLabel);
+      sidebar.appendChild(thumb);
+
+      // サムネイル描画（非同期・順次）
+      (async () => {
+        const xml = await loadSlideXml(idx);
+        if (!xml) return;
+        const rendered = renderSlideXml(xml, THUMB_W, THUMB_H, slideW, slideH);
+        rendered.style.cssText += "width:100%;height:100%;";
+        thumb.insertBefore(rendered, numLabel);
+      })();
+    }
+
+    // 最初のスライドを表示
+    await showMainSlide(0);
+
+    // プレビューにスクロール
+    previewArea.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  /* ----------------------------------------------------------------
      エラー整形
-  ------------------------------ */
+  ---------------------------------------------------------------- */
   function formatError(err, code, wrapperLines = 1) {
 
     let msg = "エラーが発生しました\n\n";
