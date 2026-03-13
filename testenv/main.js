@@ -415,8 +415,21 @@ function init() {
   ---------------------------------------------------------------- */
 
   // ユーザーコード中の writeFile 呼び出しを write(arraybuffer) に差し替え
+  // ★ 重要: new Function 内では return しないと Promise が捨てられる。
+  //   行末の pres.writeFile(...); は必ず return pres.write(...); に変換する。
   function patchWriteFile(code) {
     return code
+      // パターン1: 独立行の pres.writeFile({ fileName: '...' });
+      .replace(
+        /^([ \t]*)pres\.writeFile\s*\(\s*\{[^}]*\}\s*\)\s*;?\s*$/mg,
+        "$1return pres.write({ outputType: 'arraybuffer' });"
+      )
+      // パターン2: 独立行の pres.writeFile(); （引数なし）
+      .replace(
+        /^([ \t]*)pres\.writeFile\s*\(\s*\)\s*;?\s*$/mg,
+        "$1return pres.write({ outputType: 'arraybuffer' });"
+      )
+      // パターン3: 行途中のフォールバック
       .replace(
         /\bpres\.writeFile\s*\(\s*\{[^}]*\}\s*\)/g,
         "pres.write({ outputType: 'arraybuffer' })"
@@ -807,32 +820,74 @@ function init() {
 
   // メインのプレビュー表示関数
   async function showPptxPreview(arrayBuffer, code) {
-    const previewArea     = document.getElementById("previewArea");
-    const viewerEl        = document.getElementById("pptxViewer");
-    const downloadTopEl   = document.getElementById("previewDownloadTop");
-    const downloadBottomEl= document.getElementById("previewDownloadBottom");
+    const previewArea      = document.getElementById("previewArea");
+    const viewerEl         = document.getElementById("pptxViewer");
+    const downloadTopEl    = document.getElementById("previewDownloadTop");
+    const downloadBottomEl = document.getElementById("previewDownloadBottom");
 
     const fileName = extractFileName(code);
 
-    // ダウンロードボタン（上下）を設置
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ★ ダウンロードボタンは arrayBuffer がある時点で即座に設置
+    //   → プレビュー描画の成否に関係なく確実にダウンロード可能にする
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     downloadTopEl.innerHTML = "";
     downloadBottomEl.innerHTML = "";
     downloadTopEl.appendChild(makeDownloadBtn(arrayBuffer, fileName));
     downloadBottomEl.appendChild(makeDownloadBtn(arrayBuffer, fileName));
+    previewArea.style.display = "block";   // ← ボタン設置と同時に表示
 
-    // JSZip で解凍
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // 進捗表示ヘルパー
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    function showProgress(pct, msg) {
+      viewerEl.innerHTML = "";
+      const wrap = document.createElement("div");
+      wrap.style.cssText = [
+        "padding:32px 24px;background:#1e293b;border-radius:8px",
+        "border:1px solid #334155;font-family:system-ui,sans-serif",
+        "display:flex;flex-direction:column;align-items:center;gap:16px",
+      ].join(";");
+
+      const label = document.createElement("div");
+      label.style.cssText = "color:#94a3b8;font-size:14px;";
+      label.textContent = msg;
+
+      const barWrap = document.createElement("div");
+      barWrap.style.cssText = "width:360px;max-width:90%;height:8px;background:#334155;border-radius:4px;overflow:hidden;";
+      const bar = document.createElement("div");
+      bar.style.cssText = `height:100%;border-radius:4px;background:#4f46e5;width:${pct}%;transition:width .3s;`;
+      barWrap.appendChild(bar);
+
+      const pctLabel = document.createElement("div");
+      pctLabel.style.cssText = "color:#e2e8f0;font-size:22px;font-weight:bold;font-family:monospace;";
+      pctLabel.textContent = `${Math.round(pct)}%`;
+
+      wrap.append(label, barWrap, pctLabel);
+      viewerEl.appendChild(wrap);
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // JSZip で解凍（進捗: 0→30%）
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    showProgress(5, "PPTXを解析中...");
+    await new Promise(r => setTimeout(r, 0)); // 描画を先に反映
+
     let zip;
     try {
       zip = await JSZip.loadAsync(arrayBuffer);
     } catch (e) {
-      viewerEl.textContent = "プレビューの読み込みに失敗しました: " + e.message;
-      previewArea.style.display = "block";
+      viewerEl.innerHTML = `<div style="padding:24px;color:#f87171;font-size:13px;">⚠ プレビュー解析に失敗: ${e.message}<br>ダウンロードボタンからは取得できます。</div>`;
       return;
     }
+    showProgress(30, "スライド構造を読み込み中...");
+    await new Promise(r => setTimeout(r, 0));
 
-    // スライドサイズ取得
-    let slideW = 9144000 / 914400 * 96; // LAYOUT_WIDE: 12192000 EMU
-    let slideH = 6858000 / 914400 * 96;
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // スライドサイズ取得（進捗: 35%）
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    let slideW = 12192000 / 914400 * 96; // LAYOUT_WIDE デフォルト
+    let slideH =  6858000 / 914400 * 96;
     try {
       const presXml = await zip.file("ppt/presentation.xml").async("text");
       const presDoc = new DOMParser().parseFromString(presXml, "text/xml");
@@ -842,67 +897,94 @@ function init() {
         slideH = emuToPx(sldSz.getAttribute("cy"));
       }
     } catch(e) {}
+    showProgress(35, "スライドファイルを検索中...");
+    await new Promise(r => setTimeout(r, 0));
 
-    // スライドXMLファイルを順番に取得
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // スライドXMLをソート（★ slide(\d+).xml で正確に番号抽出）
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     const slideFiles = Object.keys(zip.files)
       .filter(f => /^ppt\/slides\/slide\d+\.xml$/.test(f))
       .sort((a, b) => {
-        const na = parseInt(a.match(/\d+/)[0]);
-        const nb = parseInt(b.match(/\d+/)[0]);
+        const na = parseInt(a.match(/slide(\d+)\.xml/)[1]);
+        const nb = parseInt(b.match(/slide(\d+)\.xml/)[1]);
         return na - nb;
       });
 
     if (slideFiles.length === 0) {
-      viewerEl.textContent = "スライドが見つかりませんでした。";
-      previewArea.style.display = "block";
+      viewerEl.innerHTML = `<div style="padding:24px;color:#fbbf24;font-size:13px;">⚠ スライドが見つかりませんでした。ダウンロードして直接確認してください。</div>`;
       return;
     }
+    showProgress(40, `${slideFiles.length}枚のスライドを発見...`);
+    await new Promise(r => setTimeout(r, 0));
 
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // 全スライドXMLを先読みしてキャッシュ（進捗: 40→85%）
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    const xmlCache = new Array(slideFiles.length).fill(null);
+    for (let i = 0; i < slideFiles.length; i++) {
+      try {
+        xmlCache[i] = await zip.file(slideFiles[i]).async("text");
+      } catch(e) {}
+      const pct = 40 + ((i + 1) / slideFiles.length) * 45;
+      showProgress(pct, `スライドを読み込み中... (${i + 1}/${slideFiles.length})`);
+      // 毎回 await で描画機会を与える
+      await new Promise(r => setTimeout(r, 0));
+    }
+
+    showProgress(90, "プレビューを構築中...");
+    await new Promise(r => setTimeout(r, 0));
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // ビューワー UI を構築
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     viewerEl.innerHTML = "";
     viewerEl.style.cssText = [
-      "border:1px solid #e2e8f0",
+      "border:1px solid #334155",
       "border-radius:8px",
       "overflow:hidden",
       "background:#1e293b",
-      "margin:8px 0",
+      "margin:4px 0",
     ].join(";");
 
-    // スライド一覧サムネイル + メイン表示 の 2ペイン構造
-    const layout = document.createElement("div");
-    layout.style.cssText = "display:flex;height:560px;";
+    const THUMB_W = 144, THUMB_H = Math.round(144 * slideH / slideW);
+    const MAIN_H  = 420, MAIN_W  = Math.round(420 * slideW / slideH);
 
-    // --- サイドバー（サムネイル） ---
+    const layout = document.createElement("div");
+    layout.style.cssText = `display:flex;height:${MAIN_H + 72}px;`;
+
+    // --- サイドバー ---
     const sidebar = document.createElement("div");
     sidebar.style.cssText = [
-      "width:160px;min-width:160px",
+      "width:164px;min-width:164px",
       "background:#0f172a",
       "overflow-y:auto",
       "padding:10px 8px",
       "display:flex;flex-direction:column;gap:8px",
-      "border-right:1px solid #334155",
+      "border-right:1px solid #1e293b",
     ].join(";");
     sidebar.style.scrollbarWidth = "thin";
-    sidebar.style.scrollbarColor = "#334155 transparent";
+    sidebar.style.scrollbarColor = "#334155 #0f172a";
 
-    // --- メイン表示エリア ---
+    // --- メイン表示 ---
     const mainArea = document.createElement("div");
     mainArea.style.cssText = [
       "flex:1;display:flex;flex-direction:column",
       "align-items:center;justify-content:center",
-      "background:#1e293b;gap:12px;padding:16px",
+      "background:#1e293b;gap:10px;padding:16px",
     ].join(";");
 
     const slideContainer = document.createElement("div");
     slideContainer.style.cssText = [
-      "background:#fff;border-radius:6px",
-      "box-shadow:0 8px 32px rgba(0,0,0,0.5)",
+      `width:${MAIN_W}px;height:${MAIN_H}px`,
+      "background:#fff;border-radius:4px",
+      "box-shadow:0 8px 32px rgba(0,0,0,0.6)",
       "overflow:hidden;flex-shrink:0",
     ].join(";");
 
     // ナビゲーション
     const nav = document.createElement("div");
-    nav.style.cssText = "display:flex;align-items:center;gap:12px;";
+    nav.style.cssText = "display:flex;align-items:center;gap:10px;";
 
     const makeNavBtn = (label) => {
       const b = document.createElement("button");
@@ -910,75 +992,68 @@ function init() {
       b.style.cssText = [
         "background:#334155;color:#e2e8f0;border:none",
         "width:34px;height:34px;border-radius:6px",
-        "font-size:18px;cursor:pointer;",
+        "font-size:18px;cursor:pointer;line-height:1",
       ].join(";");
-      b.onmouseenter = () => b.style.background = "#4f46e5";
-      b.onmouseleave = () => b.style.background = "#334155";
+      b.onmouseenter = () => { if (!b.disabled) b.style.background = "#4f46e5"; };
+      b.onmouseleave = () => { if (!b.disabled) b.style.background = "#334155"; };
       return b;
     };
-    const prevBtn2 = makeNavBtn("‹");
-    const nextBtn2 = makeNavBtn("›");
-    const navInfo2 = document.createElement("span");
-    navInfo2.style.cssText = "color:#94a3b8;font-size:13px;min-width:70px;text-align:center;font-family:monospace;";
+    const prevBtn = makeNavBtn("‹");
+    const nextBtn = makeNavBtn("›");
+    const navInfo = document.createElement("span");
+    navInfo.style.cssText = "color:#94a3b8;font-size:13px;min-width:70px;text-align:center;font-family:monospace;";
 
-    nav.append(prevBtn2, navInfo2, nextBtn2);
+    nav.append(prevBtn, navInfo, nextBtn);
     mainArea.append(slideContainer, nav);
-
     layout.append(sidebar, mainArea);
     viewerEl.appendChild(layout);
-    previewArea.style.display = "block";
 
-    // スライドデータを読み込んでサムネイルとメイン表示を生成
-    const THUMB_W = 144, THUMB_H = Math.round(144 * slideH / slideW);
-    const MAIN_H  = 420,  MAIN_W  = Math.round(420 * slideW / slideH);
     let currentIdx = 0;
-    const xmlCache = {};
 
-    async function loadSlideXml(idx) {
-      if (xmlCache[idx] !== undefined) return xmlCache[idx];
-      try {
-        const xml = await zip.file(slideFiles[idx]).async("text");
-        xmlCache[idx] = xml;
-        return xml;
-      } catch(e) { return null; }
+    function updateNav(idx) {
+      navInfo.textContent = `${idx + 1} / ${slideFiles.length}`;
+      prevBtn.disabled = idx === 0;
+      nextBtn.disabled = idx === slideFiles.length - 1;
+      prevBtn.style.opacity  = idx === 0 ? "0.3" : "1";
+      nextBtn.style.opacity  = idx === slideFiles.length - 1 ? "0.3" : "1";
+      prevBtn.style.background = "#334155";
+      nextBtn.style.background = "#334155";
     }
 
-    async function showMainSlide(idx) {
+    function showMainSlide(idx) {
       currentIdx = idx;
-      const xml = await loadSlideXml(idx);
+      const xml = xmlCache[idx];
       if (!xml) return;
 
       slideContainer.innerHTML = "";
-      slideContainer.style.width  = MAIN_W + "px";
-      slideContainer.style.height = MAIN_H + "px";
       const rendered = renderSlideXml(xml, MAIN_W, MAIN_H, slideW, slideH);
-      rendered.style.cssText += "width:100%;height:100%;";
+      rendered.style.width  = "100%";
+      rendered.style.height = "100%";
       slideContainer.appendChild(rendered);
 
-      navInfo2.textContent = `${idx + 1} / ${slideFiles.length}`;
-      prevBtn2.disabled = idx === 0;
-      nextBtn2.disabled = idx === slideFiles.length - 1;
-      prevBtn2.style.opacity = idx === 0 ? "0.3" : "1";
-      nextBtn2.style.opacity = idx === slideFiles.length - 1 ? "0.3" : "1";
+      updateNav(idx);
 
-      // サムネイルのアクティブ状態を更新
+      // サムネイルのアクティブ状態
       sidebar.querySelectorAll(".pv-thumb").forEach((t, i) => {
         t.style.borderColor = i === idx ? "#4f46e5" : "transparent";
+        t.style.boxShadow   = i === idx ? "0 0 0 1px #4f46e5" : "none";
       });
-      sidebar.querySelectorAll(".pv-thumb")[idx]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      sidebar.querySelectorAll(".pv-thumb")[idx]
+        ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
 
-    prevBtn2.onclick = () => { if (currentIdx > 0) showMainSlide(currentIdx - 1); };
-    nextBtn2.onclick = () => { if (currentIdx < slideFiles.length - 1) showMainSlide(currentIdx + 1); };
+    prevBtn.onclick = () => { if (currentIdx > 0) showMainSlide(currentIdx - 1); };
+    nextBtn.onclick = () => { if (currentIdx < slideFiles.length - 1) showMainSlide(currentIdx + 1); };
 
-    // キーボード操作（プレビューエリアにフォーカスが当たっているときのみ）
     viewerEl.setAttribute("tabindex", "0");
     viewerEl.onkeydown = (e) => {
-      if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); nextBtn2.click(); }
-      if (e.key === "ArrowLeft"  || e.key === "ArrowUp")   { e.preventDefault(); prevBtn2.click(); }
+      if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); nextBtn.click(); }
+      if (e.key === "ArrowLeft"  || e.key === "ArrowUp")   { e.preventDefault(); prevBtn.click(); }
     };
 
-    // サムネイルを非同期で順番に描画
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // サムネイル描画（キャッシュ済みXMLから同期的に生成）
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     for (let i = 0; i < slideFiles.length; i++) {
       const thumb = document.createElement("div");
       thumb.className = "pv-thumb";
@@ -988,43 +1063,43 @@ function init() {
         "border:2px solid transparent",
         "cursor:pointer;flex-shrink:0",
         "background:#fff;position:relative",
-        "transition:border-color .15s",
+        "transition:border-color .12s, box-shadow .12s",
       ].join(";");
 
       const numLabel = document.createElement("div");
       numLabel.textContent = i + 1;
       numLabel.style.cssText = [
         "position:absolute;bottom:3px;right:5px",
-        "font-size:10px;color:#94a3b8",
-        "background:rgba(15,23,42,.75)",
+        "font-size:10px;color:#e2e8f0",
+        "background:rgba(15,23,42,.8)",
         "padding:1px 4px;border-radius:3px;z-index:2",
-        "font-family:monospace",
+        "font-family:monospace;pointer-events:none",
       ].join(";");
 
-      const idx = i; // クロージャ用
+      const idx = i;
       thumb.onclick = () => showMainSlide(idx);
       thumb.onmouseenter = () => { if (idx !== currentIdx) thumb.style.borderColor = "#6366f1"; };
       thumb.onmouseleave = () => { if (idx !== currentIdx) thumb.style.borderColor = "transparent"; };
-      thumb.append(numLabel);
-      sidebar.appendChild(thumb);
 
-      // サムネイル描画（非同期・順次）
-      (async () => {
-        const xml = await loadSlideXml(idx);
-        if (!xml) return;
-        const rendered = renderSlideXml(xml, THUMB_W, THUMB_H, slideW, slideH);
-        rendered.style.cssText += "width:100%;height:100%;";
-        thumb.insertBefore(rendered, numLabel);
-      })();
+      if (xmlCache[i]) {
+        const rendered = renderSlideXml(xmlCache[i], THUMB_W, THUMB_H, slideW, slideH);
+        rendered.style.width  = "100%";
+        rendered.style.height = "100%";
+        thumb.appendChild(rendered);
+      }
+      thumb.appendChild(numLabel);
+      sidebar.appendChild(thumb);
     }
 
-    // 最初のスライドを表示
-    await showMainSlide(0);
+    showProgress(98, "完了！");
+    await new Promise(r => setTimeout(r, 80));
+
+    // 1枚目を表示
+    showMainSlide(0);
 
     // プレビューにスクロール
     previewArea.scrollIntoView({ behavior: "smooth", block: "start" });
   }
-
   /* ----------------------------------------------------------------
      エラー整形
   ---------------------------------------------------------------- */
