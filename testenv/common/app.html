@@ -118,28 +118,20 @@
     <h2>PowerPoint生成＆プレビュー</h2>
     <textarea class="codeinput" id="codeInput" placeholder="ここに pptxgenjs のコードを貼り付けてください"></textarea>
     
-    <button id="runBtn">スライド生成＆プレビュー</button>
+    <button id="runBtn">▶ スライド生成＆プレビュー</button>
     
     <pre id="errorBox"></pre>
-
-    <div id="previewTopBar" style="display:none; margin-top:12px;">
-        <button id="downloadBtnTop">スライドをダウンロード</button>
-    </div>
-
-    <div id="previewArea" style="display:none; margin-top:8px;">
-        <iframe id="previewFrame"
-            style="width:100%; height:500px; border:1px solid #cbd5e1; border-radius:4px; background:#fff;"
-            sandbox="allow-scripts allow-same-origin">
-        </iframe>
-    </div>
-
-    <div id="previewBottomBar" style="display:none; margin-top:8px; margin-bottom:8px;">
-        <button id="downloadBtnBottom">スライドをダウンロード</button>
-    </div>
     
     <div id="saveArea">
         <input type="text" id="slideTitle" placeholder="タイトル">
         <button id="saveBtn">プロンプト＆スライド保存</button>
+    </div>
+
+    <!-- プレビューエリア（上部ダウンロードボタン → スライドビューワー → 下部ダウンロードボタン） -->
+    <div id="previewArea" style="display:none; margin-top:24px;">
+      <div id="previewDownloadTop"></div>
+      <div id="pptxViewer"></div>
+      <div id="previewDownloadBottom"></div>
     </div>
     
     <div id="savedList"></div>
