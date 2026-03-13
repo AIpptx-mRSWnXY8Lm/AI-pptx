@@ -14,17 +14,14 @@ function copyButton() {
   const baseClone = promptBox.cloneNode(true);
   baseClone.querySelectorAll("input, textarea").forEach(el => el.remove());
 
-  // details ラッパーを unwrap（中身のノードはそのまま保持）
+  // details を unwrap：summary（折りたたみラベル）は削除し、本文ノードだけ展開
   baseClone.querySelectorAll("details").forEach(details => {
     const frag = document.createDocumentFragment();
-    [...details.childNodes].forEach(n => frag.appendChild(n.cloneNode(true)));
+    [...details.childNodes].forEach(n => {
+      if (n.nodeName.toLowerCase() === "summary") return; // ラベルは捨てる
+      frag.appendChild(n.cloneNode(true));
+    });
     details.replaceWith(frag);
-  });
-  // summary タグも unwrap
-  baseClone.querySelectorAll("summary").forEach(summary => {
-    const frag = document.createDocumentFragment();
-    [...summary.childNodes].forEach(n => frag.appendChild(n.cloneNode(true)));
-    summary.replaceWith(frag);
   });
 
   // --- 修正: textContent 一致ではなく id で ikanoran 要素を直接置換 ---
