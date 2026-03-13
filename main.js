@@ -160,9 +160,8 @@ function init() {
      実行（安全ラッパー）
   ------------------------------ */
 
-  // --- 修正: ラッパー行数を定数化して行番号補正に使う ---
-  // `"use strict";\n` の 1 行
-  const WRAPPER_LINES = 1;
+  // 実行（安全ラッパー）
+  // ---------------------------------------------------------------
 
   /* ================================================================
      AUTO_FIXES テーブル
@@ -282,10 +281,24 @@ function init() {
 
   /* ----------------------------------------------------------------
      pptxgenjs の addShape を安全化したコンストラクタを返す
+
+     【重要】new Function("PptxGenJS", code) でユーザーコードを実行すると、
+     コード内の `new PptxGenJS()` はここで渡した SafePptx を指す。
+     SafePptx 内で再び `new PptxGenJS()` と書くと SafePptx 自身を再帰呼び出し
+     してしまう（無限再帰）。
+
+     対策：
+       - new Function の引数名を "PptxGenJS" のままにする（ユーザーコードとの互換）
+       - SafePptx の内部では、引数名とは別のクロージャ変数 _RealPptxGenJS で
+         本物のライブラリコンストラクタを参照する
   ---------------------------------------------------------------- */
   function buildSafePptx() {
+    // new Function に渡す前に本物のコンストラクタをクロージャに束縛しておく
+    const _RealPptxGenJS = PptxGenJS;  // ← グローバルの本物
+
     return function SafePptx(...args) {
-      const pres = new PptxGenJS(...args);
+      // _RealPptxGenJS は SafePptx の外側のクロージャを参照するので再帰しない
+      const pres = new _RealPptxGenJS(...args);
 
       if (!pres.shapes) {
         pres.shapes = pres.ShapeType || {};
@@ -316,6 +329,9 @@ function init() {
     return new Promise((resolve, reject) => {
       let result;
       try {
+        // 引数名 "PptxGenJS" のまま SafePptx を渡す。
+        // ユーザーコードの `new PptxGenJS()` → SafePptx が呼ばれる。
+        // SafePptx 内部は _RealPptxGenJS（クロージャ）を使うので再帰しない。
         const fn = new Function("PptxGenJS", `"use strict";\n${code}`);
         result = fn(buildSafePptx());
       } catch (err) {
@@ -420,7 +436,7 @@ function init() {
         errorBox.style.color = "";
       }, 6000);
     } else {
-      let msg = formatError(lastErr, originalCode, WRAPPER_LINES);
+      let msg = formatError(lastErr, originalCode);
       if (appliedLabels.length > 0) {
         msg += `\n\n【自動修正を試みましたが解決できませんでした】\n試みた修正: ${appliedLabels.join(" / ")}`;
       }
@@ -431,7 +447,6 @@ function init() {
 
   /* ------------------------------
      エラー整形
-     --- 修正: WRAPPER_LINES を受け取り行番号補正を正確にする ---
   ------------------------------ */
   function formatError(err, code, wrapperLines = 1) {
 
@@ -440,32 +455,36 @@ function init() {
     msg += `内容: ${err.message}\n`;
 
     if (err.stack) {
-      // ブラウザによってスタック形式が異なるため複数パターンで試みる
+      // ブラウザごとにスタック形式が異なるため複数パターンで試みる
       // Chrome/Edge: "at <anonymous>:行:列"
-      // Safari:      "新しい関数コード@行:列" もしくは "eval code:行:列"
+      // Safari:      "eval code:行:列" / "Function:行:列"
       const m = err.stack.match(/<anonymous>:(\d+):(\d+)/)
              || err.stack.match(/Function(?:Code)?:(\d+):(\d+)/)
              || err.stack.match(/:(\d+):(\d+)/);
 
       if (m) {
-        // new Function の行番号は「function 宣言の 1 行」+「"use strict";\n の 1 行」
-        // の計 (wrapperLines + 1) 行分オフセットされている
-        const rawLine = Number(m[1]);
-        const line    = rawLine - (wrapperLines + 1);
-        const col     = m[2];
+        const rawLine   = Number(m[1]);
+        const col       = Number(m[2]);
+        // new Function 内では先頭に以下の行が挿入される:
+        //   1行目: 無名関数の宣言（ブラウザ内部）
+        //   2行目: "use strict";
+        // → ユーザーコードの実際の行 = rawLine - 2
+        const userLine  = rawLine - 2;
+        const codeLines = code.split("\n");
+        const totalLines = codeLines.length;
 
-        // NaN や 0 以下になった場合は行番号を表示しない
-        if (Number.isFinite(line) && line > 0) {
-          const lines    = code.split("\n");
-          const codeLine = lines[line - 1] ?? "";
-
-          msg += `\n行: ${line}`;
+        if (userLine >= 1 && userLine <= totalLines) {
+          // 正常範囲：ユーザーコード内の行を特定できた
+          const codeLine = codeLines[userLine - 1] ?? "";
+          msg += `\n行: ${userLine}`;
           msg += `\n列: ${col}`;
           msg += `\n\n該当コード:\n${codeLine}`;
         } else {
-          // 行が特定できない場合は列のみ表示
-          msg += `\n列: ${col}`;
-          msg += `\n（行番号の特定に失敗しました。ブラウザの開発者ツールでご確認ください）`;
+          // 行番号がユーザーコード範囲外 = ラッパー内部 or ライブラリ内部のエラー
+          // （「行: 292」のようにコード行数を大幅に超えるケースがこれに該当）
+          msg += `\n※ エラー箇所はライブラリ内部またはラッパー内部です（行番号: ${rawLine}）。`;
+          msg += `\n  コード自体の構文は正しいが、pptxgenjs への渡し方に問題がある可能性があります。`;
+          if (col) msg += `\n列（参考）: ${col}`;
         }
       }
     }
