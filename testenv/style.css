@@ -79,18 +79,18 @@ button {
   margin-top: 8px;
 }
 
-/* プレビューエリア */
-#previewTopBar button,
-#previewBottomBar button {
-  background-color: #1e40af;
-  color: #fff;
-  border: none;
-  border-radius: 4px;
-  padding: 10px 20px;
-  font-size: 15px;
-  cursor: pointer;
+/* PPTXプレビューエリア */
+#previewArea {
+  margin-top: 20px;
 }
-#previewTopBar button:hover,
-#previewBottomBar button:hover {
-  background-color: #1d4ed8;
+#previewDownloadTop,
+#previewDownloadBottom {
+  margin: 4px 0;
+}
+#pptxViewer:focus {
+  outline: 2px solid #4f46e5;
+  outline-offset: 2px;
+}
+#pptxViewer .pv-thumb:hover {
+  border-color: #6366f1 !important;
 }
