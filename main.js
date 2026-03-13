@@ -42,11 +42,52 @@ function copyButton() {
   const btn = document.getElementById("copybutton");
   btn.textContent = "コピー完了";
 
+  showToast("copyToast", "✔︎ プロンプトをコピーしました。AIに貼り付けてください。", 5000);
+
   if (copyTimer !== null) clearTimeout(copyTimer);
   copyTimer = setTimeout(() => {
     btn.textContent = "コピーする";
     copyTimer = null;
   }, 2000);
+}
+
+/* ------------------------------
+   トースト通知（緑ボックス）
+   id    : 同一 id のトーストは上書きして表示
+   msg   : 表示テキスト
+   ms    : 表示時間（ミリ秒）
+------------------------------ */
+function showToast(id, msg, ms = 5000) {
+  let el = document.getElementById(id);
+  if (!el) {
+    el = document.createElement("div");
+    el.id = id;
+    el.style.cssText = [
+      "display:none",
+      "margin-top:10px",
+      "padding:10px 16px",
+      "background:#dcfce7",
+      "color:#166534",
+      "border:1px solid #86efac",
+      "border-radius:6px",
+      "font-size:14px",
+      "line-height:1.5",
+    ].join(";");
+  }
+  el.textContent = msg;
+  el.style.display = "block";
+
+  // 挿入先：コピーボタンは .AIbuttons の直後、保存ボタンは #saveArea の直後
+  if (id === "copyToast") {
+    const anchor = document.querySelector(".AIbuttons");
+    if (anchor && !anchor.nextSibling?.id?.includes("Toast")) anchor.after(el);
+  } else {
+    const anchor = document.getElementById("saveArea");
+    if (anchor && !anchor.nextSibling?.id?.includes("Toast")) anchor.after(el);
+  }
+
+  clearTimeout(el._timer);
+  el._timer = setTimeout(() => { el.style.display = "none"; }, ms);
 }
 
 /* ===============================
@@ -491,7 +532,10 @@ function init() {
     };
 
     const saved = PptxStore.save(key, data);
-    if (saved) addSavedItem(key, data);
+    if (saved) {
+      addSavedItem(key, data);
+      showToast("saveToast", "✔︎ プロンプト・コードを保存しました。以下の欄から復元・削除ができます", 5000);
+    }
 
   });
 
@@ -520,6 +564,19 @@ function init() {
     d.append(s);
 
     const pre = document.createElement("pre");
+    pre.style.cssText = [
+      "font-size:12px",
+      "white-space:pre-wrap",
+      "word-break:break-all",
+      "overflow-wrap:anywhere",
+      "margin:8px 0 4px",
+      "padding:8px",
+      "background:#f8fafc",
+      "border:1px solid #e2e8f0",
+      "border-radius:4px",
+      "max-height:400px",
+      "overflow-y:auto",
+    ].join(";");
     pre.textContent =
 `【保存日時】
 ${data.savedAt}
