@@ -123,55 +123,195 @@ function init() {
   // `"use strict";\n` の 1 行
   const WRAPPER_LINES = 1;
 
-  runBtn.addEventListener("click", () => {
+  /* ----------------------------------------------------------------
+     既知エラーパターンの自動修正テーブル
+     各エントリ: { pattern, fix(code) → 修正済みコード }
+     エラーが発生するたびに先頭から順に試行し、修正できたら再実行する。
+     スライドのレイアウト・内容には一切触れない。
+  ---------------------------------------------------------------- */
+  const AUTO_FIXES = [
 
-    errorBox.textContent = "";
-
-    try {
-
-      // Proxy を使うと PptxGenJS バンドル版のコンストラクタ内 this が壊れ
-      // "undefined is not an object (evaluating 'this._version=...')" が発生する。
-      // そのため Proxy はやめ、new PptxGenJS() の直後に addShape だけパッチする
-      // 通常の関数ラッパーに差し替える。
-      const SafePptx = function(...args) {
-        const pres = new PptxGenJS(...args);
-
-        if (!pres.shapes) {
-          pres.shapes = pres.ShapeType || {};
-        }
-
-        const originalAddShape = pres.addShape.bind(pres);
-        pres.addShape = function(type, opt = {}) {
-          if (!type) {
-            throw new Error(
-              "ShapeType が未指定です\n例: slide.addShape(pptx.ShapeType.RECTANGLE,{x:1,y:1,w:1,h:1})"
+    // ① LINE shape に h:0 が渡されると内部エラー → h を最小値に補正し
+    //   fill ではなく line プロパティに変換する
+    {
+      label: "LINE shape の h:0 / fill → line プロパティ補正",
+      pattern: /ShapeType\.LINE|shapes\.LINE|\bLINE\b/,
+      fix(code) {
+        // addShape(...LINE..., { ... }) の引数オブジェクト全体を書き換える
+        // h:0 → h:0.01、fill:{color:'XXXXXX'} → line:{color:'XXXXXX',width:1}
+        return code.replace(
+          /(addShape\s*\(\s*(?:[^,]+LINE[^,]*),\s*)\{([^}]*)\}/g,
+          (match, prefix, body) => {
+            let fixed = body;
+            // h: 0 → h: 0.01
+            fixed = fixed.replace(/\bh\s*:\s*0\b/, "h: 0.01");
+            // fill: { color: 'XXXXXX' } → line: { color: 'XXXXXX', width: 1 }
+            fixed = fixed.replace(
+              /fill\s*:\s*\{\s*color\s*:\s*(['"])([0-9A-Fa-f]{6})\1\s*\}/,
+              "line: { color: '$2', width: 1 }"
             );
+            return `${prefix}{${fixed}}`;
           }
-          opt.x ??= 0;
-          opt.y ??= 0;
-          opt.w ??= 1;
-          opt.h ??= 1;
-          return originalAddShape(type, opt);
-        };
+        );
+      }
+    },
 
-        return pres;
-      };
+    // ② RIGHT_ARROW / LEFT_ARROW など矢印系 ShapeType が存在しない場合
+    //   pptxgenjs 3.x の正式 enum 名 "RIGHT_ARROW" は "ARROW_RIGHT" ではなく
+    //   実際には存在するが、取得パスが pres.ShapeType でないと undefined になる。
+    //   文字列 'rect' や 'line' などのフォールバック文字列をそのまま渡している
+    //   場合（err2 パターン）を検出し、pres.ShapeType 経由の呼び出しに差し替える。
+    {
+      label: "ShapeType 文字列フォールバック → pres.ShapeType 直接参照に変換",
+      pattern: /(?:const\s+\w+\s*=\s*ShapeType\.\w+\s*\|\|\s*['"][a-z_]+['"])/,
+      fix(code) {
+        // const RECT = ShapeType.RECTANGLE || 'rect'  →  const RECT = ShapeType.RECTANGLE
+        // const LINE = ShapeType.LINE || 'line'        →  const LINE = ShapeType.LINE
+        // など "|| '文字列'" の部分を除去
+        return code.replace(
+          /(const\s+\w+\s*=\s*ShapeType\.\w+)\s*\|\|\s*['"][^'"]+['"]/g,
+          "$1"
+        );
+      }
+    },
 
-      const wrapper = new Function(
-        "PptxGenJS",
-        `"use strict";\n${codeInput.value}`
-      );
+    // ③ addShape に数値ではなく '100%' 形式の文字列が w/h に渡されてエラーになる場合
+    //   w: '100%' → LAYOUT_WIDE の横幅 13.33 インチに変換
+    //   h: '100%' → 7.5 インチに変換
+    {
+      label: "w/h の '%' 文字列をインチ数値に変換",
+      pattern: /[wh]\s*:\s*['"]100%['"]/,
+      fix(code) {
+        return code
+          .replace(/\bw\s*:\s*['"]100%['"]/g, "w: 13.33")
+          .replace(/\bh\s*:\s*['"]100%['"]/g, "h: 7.5")
+          .replace(/\bw\s*:\s*['"]90%['"]/g, "w: 12")
+          .replace(/\bw\s*:\s*['"]80%['"]/g, "w: 10.67")
+          .replace(/\bw\s*:\s*['"]50%['"]/g, "w: 6.67");
+      }
+    },
 
-      // writeFile などの非同期エラーを catch するため戻り値を Promise として扱う
-      const result = wrapper(SafePptx);
-      if (result && typeof result.catch === "function") {
-        result.catch(err => {
-          errorBox.textContent = formatError(err, codeInput.value, WRAPPER_LINES);
-        });
+  ];
+
+  /* ----------------------------------------------------------------
+     pptxgenjs の addShape を安全化したコンストラクタラッパーを返す
+  ---------------------------------------------------------------- */
+  function buildSafePptx() {
+    return function SafePptx(...args) {
+      const pres = new PptxGenJS(...args);
+
+      // shapes エイリアスを保証
+      if (!pres.shapes) {
+        pres.shapes = pres.ShapeType || {};
       }
 
+      const _addShape = pres.addShape.bind(pres);
+      pres.addShape = function(type, opt = {}) {
+        if (!type) {
+          throw new Error(
+            "ShapeType が未指定です\n例: slide.addShape(pptx.ShapeType.RECTANGLE,{x:1,y:1,w:1,h:1})"
+          );
+        }
+        opt.x ??= 0;
+        opt.y ??= 0;
+        opt.w ??= 1;
+        opt.h ??= 1;
+        return _addShape(type, opt);
+      };
+
+      return pres;
+    };
+  }
+
+  /* ----------------------------------------------------------------
+     コードを実行し、Promise まで含めて結果を返す
+     成功なら resolve、失敗なら reject する Promise を返す
+  ---------------------------------------------------------------- */
+  function runCode(code) {
+    return new Promise((resolve, reject) => {
+      let result;
+      try {
+        const fn = new Function("PptxGenJS", `"use strict";\n${code}`);
+        result = fn(buildSafePptx());
+      } catch (err) {
+        reject(err);
+        return;
+      }
+      // writeFile 等の非同期エラーも捕捉
+      if (result && typeof result.then === "function") {
+        result.then(resolve).catch(reject);
+      } else {
+        resolve(result);
+      }
+    });
+  }
+
+  /* ----------------------------------------------------------------
+     自動修正を順番に試みながら再実行するメインロジック
+  ---------------------------------------------------------------- */
+  runBtn.addEventListener("click", async () => {
+
+    errorBox.textContent = "";
+    runBtn.disabled = true;
+    runBtn.textContent = "実行中…";
+
+    let code = codeInput.value;   // textarea の内容は変更しない
+    let lastErr = null;
+    let fixLog  = [];
+
+    // まずオリジナルコードをそのまま試す
+    try {
+      await runCode(code);
+      runBtn.disabled = false;
+      runBtn.textContent = "スライド生成（PPTXダウンロード）";
+      return; // 成功
     } catch (err) {
-      errorBox.textContent = formatError(err, codeInput.value, WRAPPER_LINES);
+      lastErr = err;
+    }
+
+    // 失敗したら AUTO_FIXES を順に適用して再試行
+    let fixedCode = code;
+    for (const fix of AUTO_FIXES) {
+      if (!fix.pattern.test(fixedCode)) continue; // 該当パターンなければスキップ
+
+      const candidate = fix.fix(fixedCode);
+      if (candidate === fixedCode) continue;       // 変化なければスキップ
+
+      try {
+        await runCode(candidate);
+        // 成功
+        fixedCode = candidate;
+        fixLog.push(fix.label);
+        lastErr = null;
+        break;
+      } catch (err) {
+        // この修正では直らなかった → fixedCode は更新せず次へ
+        lastErr = err;
+        // ただし部分的に改善している可能性があるので fixedCode は更新する
+        fixedCode = candidate;
+        fixLog.push(fix.label + "（部分適用）");
+      }
+    }
+
+    runBtn.disabled = false;
+    runBtn.textContent = "スライド生成（PPTXダウンロード）";
+
+    if (lastErr) {
+      // 自動修正しても直らなかった場合はエラーを表示
+      let msg = formatError(lastErr, codeInput.value, WRAPPER_LINES);
+      if (fixLog.length > 0) {
+        msg += `\n\n【自動修正を試みましたが解決できませんでした】\n適用: ${fixLog.join(" / ")}`;
+      }
+      errorBox.textContent = msg;
+    } else if (fixLog.length > 0) {
+      // 自動修正で成功した場合はその旨を表示（コードは変更しない）
+      errorBox.style.color = "#16a34a";
+      errorBox.textContent =
+        `✅ 自動修正でエラーを解決し、ダウンロードしました。\n適用した修正: ${fixLog.join(" / ")}`;
+      setTimeout(() => {
+        errorBox.textContent = "";
+        errorBox.style.color = "";
+      }, 6000);
     }
 
   });
