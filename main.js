@@ -164,29 +164,89 @@ function init() {
   // `"use strict";\n` の 1 行
   const WRAPPER_LINES = 1;
 
-  /* ----------------------------------------------------------------
-     既知エラーパターンの自動修正テーブル
-     各エントリ: { pattern, fix(code) → 修正済みコード }
-     エラーが発生するたびに先頭から順に試行し、修正できたら再実行する。
-     スライドのレイアウト・内容には一切触れない。
-  ---------------------------------------------------------------- */
+  /* ================================================================
+     AUTO_FIXES テーブル
+     ルール：
+       - pattern : このパターンにマッチするコードにのみ適用を試みる
+       - fix(code): コードを受け取り修正済みコードを返す
+       - 各 fix は独立して適用される（前の fix の失敗結果を引き継がない）
+       - スライドのレイアウト・内容には絶対に触れない
+  ================================================================ */
   const AUTO_FIXES = [
 
-    // ① LINE shape に h:0 が渡されると内部エラー → h を最小値に補正し
-    //   fill ではなく line プロパティに変換する
+    // ──────────────────────────────────────────────────────────────
+    // F-1: 全角引用符・全角記号の正規化
+    //   SyntaxError: Invalid character が発生するケースの大半は
+    //   コピー時に全角の ' ' " " などが混入していることによる。
+    //   最初に必ず適用し、後続 fix のベースラインを整える。
+    // ──────────────────────────────────────────────────────────────
+    {
+      label: "全角引用符・記号を半角に正規化",
+      // 全角シングル/ダブル引用符、全角コロン、全角波括弧 等
+      pattern: /[''""：｛｝（）；]/,
+      fix(code) {
+        return code
+          .replace(/['']/g, "'")
+          .replace(/[""]/g, '"')
+          .replace(/：/g, ":")
+          .replace(/｛/g, "{").replace(/｝/g, "}")
+          .replace(/（/g, "(").replace(/）/g, ")")
+          .replace(/；/g, ";");
+      }
+    },
+
+    // ──────────────────────────────────────────────────────────────
+    // F-2: ShapeType 変数切り出し + 文字列フォールバックパターンの修正
+    //
+    //   問題の構造（err2 パターン）:
+    //     const ShapeType = pres.ShapeType || pres.shapes || {};
+    //     const RECT = ShapeType.RECTANGLE || 'rect';   ← 'rect' が渡されてエラー
+    //
+    //   原因: new Function 内では pres が SafePptx のインスタンスなので
+    //         pres.ShapeType は正しく存在するが、
+    //         フォールバック文字列 'rect' 等が addShape に渡るとエラーになる。
+    //
+    //   対処:
+    //     1. `const RECT = ShapeType.RECTANGLE || 'rect'` の文字列フォールバックを除去
+    //        → `const RECT = ShapeType.RECTANGLE`
+    //     2. `const ShapeType = pres.ShapeType || pres.shapes || {}`
+    //        のさらに前に `const pres_ShapeType_ref = ...` を追加するのは不要。
+    //        SafePptx が pres.ShapeType を保証しているため。
+    //
+    //   正規表現の厳密化:
+    //     マッチ対象を「const 識別子 = ShapeType.識別子 || '英小文字のみ'」に限定し
+    //     `pres.shapes || {}` のような別の || 式に誤ってマッチしないようにする。
+    // ──────────────────────────────────────────────────────────────
+    {
+      label: "ShapeType フォールバック文字列を除去",
+      // `ShapeType.XXX || 'xxx'` の形にのみマッチ（pres.shapes || {} は対象外）
+      pattern: /const\s+\w+\s*=\s*ShapeType\.\w+\s*\|\|\s*'[a-z_]+'/,
+      fix(code) {
+        // `const RECT = ShapeType.RECTANGLE || 'rect'`
+        //   → `const RECT = ShapeType.RECTANGLE`
+        // ShapeType.XXX の直後の `|| 'lowercase'` だけを除去する。
+        // `pres.shapes || {}` などには絶対にマッチしない正規表現。
+        return code.replace(
+          /(const\s+\w+\s*=\s*ShapeType\.\w+)\s*\|\|\s*'[a-z_]+'/g,
+          "$1"
+        );
+      }
+    },
+
+    // ──────────────────────────────────────────────────────────────
+    // F-3: LINE shape の h:0 / fill → line プロパティ補正
+    //   pptxgenjs の LINE は h:0 を受け付けず、
+    //   色は fill ではなく line: { color, width } で渡す必要がある。
+    // ──────────────────────────────────────────────────────────────
     {
       label: "LINE shape の h:0 / fill → line プロパティ補正",
-      pattern: /ShapeType\.LINE|shapes\.LINE|\bLINE\b/,
+      pattern: /addShape\s*\(\s*[^,]*LINE[^,]*,/,
       fix(code) {
-        // addShape(...LINE..., { ... }) の引数オブジェクト全体を書き換える
-        // h:0 → h:0.01、fill:{color:'XXXXXX'} → line:{color:'XXXXXX',width:1}
         return code.replace(
-          /(addShape\s*\(\s*(?:[^,]+LINE[^,]*),\s*)\{([^}]*)\}/g,
+          /(addShape\s*\(\s*[^,]*LINE[^,]*,\s*)\{([^}]*)\}/g,
           (match, prefix, body) => {
             let fixed = body;
-            // h: 0 → h: 0.01
             fixed = fixed.replace(/\bh\s*:\s*0\b/, "h: 0.01");
-            // fill: { color: 'XXXXXX' } → line: { color: 'XXXXXX', width: 1 }
             fixed = fixed.replace(
               /fill\s*:\s*\{\s*color\s*:\s*(['"])([0-9A-Fa-f]{6})\1\s*\}/,
               "line: { color: '$2', width: 1 }"
@@ -197,51 +257,36 @@ function init() {
       }
     },
 
-    // ② RIGHT_ARROW / LEFT_ARROW など矢印系 ShapeType が存在しない場合
-    //   pptxgenjs 3.x の正式 enum 名 "RIGHT_ARROW" は "ARROW_RIGHT" ではなく
-    //   実際には存在するが、取得パスが pres.ShapeType でないと undefined になる。
-    //   文字列 'rect' や 'line' などのフォールバック文字列をそのまま渡している
-    //   場合（err2 パターン）を検出し、pres.ShapeType 経由の呼び出しに差し替える。
-    {
-      label: "ShapeType 文字列フォールバック → pres.ShapeType 直接参照に変換",
-      pattern: /(?:const\s+\w+\s*=\s*ShapeType\.\w+\s*\|\|\s*['"][a-z_]+['"])/,
-      fix(code) {
-        // const RECT = ShapeType.RECTANGLE || 'rect'  →  const RECT = ShapeType.RECTANGLE
-        // const LINE = ShapeType.LINE || 'line'        →  const LINE = ShapeType.LINE
-        // など "|| '文字列'" の部分を除去
-        return code.replace(
-          /(const\s+\w+\s*=\s*ShapeType\.\w+)\s*\|\|\s*['"][^'"]+['"]/g,
-          "$1"
-        );
-      }
-    },
-
-    // ③ addShape に数値ではなく '100%' 形式の文字列が w/h に渡されてエラーになる場合
-    //   w: '100%' → LAYOUT_WIDE の横幅 13.33 インチに変換
-    //   h: '100%' → 7.5 インチに変換
+    // ──────────────────────────────────────────────────────────────
+    // F-4: w/h の '%' 文字列をインチ数値に変換
+    //   addShape の w/h は数値のみ受け付ける。
+    // ──────────────────────────────────────────────────────────────
     {
       label: "w/h の '%' 文字列をインチ数値に変換",
-      pattern: /[wh]\s*:\s*['"]100%['"]/,
+      pattern: /[wh]\s*:\s*['"][0-9]+%['"]/,
       fix(code) {
         return code
           .replace(/\bw\s*:\s*['"]100%['"]/g, "w: 13.33")
           .replace(/\bh\s*:\s*['"]100%['"]/g, "h: 7.5")
-          .replace(/\bw\s*:\s*['"]90%['"]/g, "w: 12")
-          .replace(/\bw\s*:\s*['"]80%['"]/g, "w: 10.67")
-          .replace(/\bw\s*:\s*['"]50%['"]/g, "w: 6.67");
+          .replace(/\bw\s*:\s*['"]90%['"]/g,  "w: 12")
+          .replace(/\bw\s*:\s*['"]80%['"]/g,  "w: 10.67")
+          .replace(/\bw\s*:\s*['"]75%['"]/g,  "w: 10")
+          .replace(/\bw\s*:\s*['"]66%['"]/g,  "w: 8.8")
+          .replace(/\bw\s*:\s*['"]50%['"]/g,  "w: 6.67")
+          .replace(/\bw\s*:\s*['"]33%['"]/g,  "w: 4.44")
+          .replace(/\bw\s*:\s*['"]25%['"]/g,  "w: 3.33");
       }
     },
 
   ];
 
   /* ----------------------------------------------------------------
-     pptxgenjs の addShape を安全化したコンストラクタラッパーを返す
+     pptxgenjs の addShape を安全化したコンストラクタを返す
   ---------------------------------------------------------------- */
   function buildSafePptx() {
     return function SafePptx(...args) {
       const pres = new PptxGenJS(...args);
 
-      // shapes エイリアスを保証
       if (!pres.shapes) {
         pres.shapes = pres.ShapeType || {};
       }
@@ -250,7 +295,7 @@ function init() {
       pres.addShape = function(type, opt = {}) {
         if (!type) {
           throw new Error(
-            "ShapeType が未指定です\n例: slide.addShape(pptx.ShapeType.RECTANGLE,{x:1,y:1,w:1,h:1})"
+            "ShapeType が未指定です\n例: slide.addShape(pres.ShapeType.RECTANGLE,{x:1,y:1,w:1,h:1})"
           );
         }
         opt.x ??= 0;
@@ -265,8 +310,7 @@ function init() {
   }
 
   /* ----------------------------------------------------------------
-     コードを実行し、Promise まで含めて結果を返す
-     成功なら resolve、失敗なら reject する Promise を返す
+     コードを実行する（Promise のエラーも含めて reject する）
   ---------------------------------------------------------------- */
   function runCode(code) {
     return new Promise((resolve, reject) => {
@@ -278,7 +322,6 @@ function init() {
         reject(err);
         return;
       }
-      // writeFile 等の非同期エラーも捕捉
       if (result && typeof result.then === "function") {
         result.then(resolve).catch(reject);
       } else {
@@ -288,71 +331,100 @@ function init() {
   }
 
   /* ----------------------------------------------------------------
-     自動修正を順番に試みながら再実行するメインロジック
+     自動修正ロジック
+     重要な設計原則:
+       - 失敗した fix の結果を次の fix に引き継がない
+         （壊れたコードが蓄積してさらに壊れるのを防ぐ）
+       - 各 fix は必ずオリジナルコードをベースとして適用する
+       - 複数の fix が必要な場合は、全 fix を適用した合成コードも試す
   ---------------------------------------------------------------- */
   runBtn.addEventListener("click", async () => {
 
     errorBox.textContent = "";
+    errorBox.style.color = "";
     runBtn.disabled = true;
     runBtn.textContent = "実行中…";
 
-    let code = codeInput.value;   // textarea の内容は変更しない
-    let lastErr = null;
-    let fixLog  = [];
+    const originalCode = codeInput.value; // textarea は絶対に変更しない
+    let lastErr  = null;
+    let fixLog   = [];
 
-    // まずオリジナルコードをそのまま試す
+    // Step 1: まずオリジナルをそのまま試す
     try {
-      await runCode(code);
+      await runCode(originalCode);
       runBtn.disabled = false;
       runBtn.textContent = "スライド生成（PPTXダウンロード）";
-      return; // 成功
+      return;
     } catch (err) {
       lastErr = err;
     }
 
-    // 失敗したら AUTO_FIXES を順に適用して再試行
-    let fixedCode = code;
-    for (const fix of AUTO_FIXES) {
-      if (!fix.pattern.test(fixedCode)) continue; // 該当パターンなければスキップ
+    // Step 2: 各 fix を「オリジナルコードに対して」単独で試す
+    //   → 失敗しても fixedCode は汚染されない
+    let succeededCode = null;
+    const appliedLabels = [];
 
-      const candidate = fix.fix(fixedCode);
-      if (candidate === fixedCode) continue;       // 変化なければスキップ
+    for (const fix of AUTO_FIXES) {
+      if (!fix.pattern.test(originalCode)) continue;
+
+      const candidate = fix.fix(originalCode);
+      if (candidate === originalCode) continue;
 
       try {
         await runCode(candidate);
-        // 成功
-        fixedCode = candidate;
-        fixLog.push(fix.label);
+        succeededCode = candidate;
+        appliedLabels.push(fix.label);
         lastErr = null;
         break;
       } catch (err) {
-        // この修正では直らなかった → fixedCode は更新せず次へ
         lastErr = err;
-        // ただし部分的に改善している可能性があるので fixedCode は更新する
-        fixedCode = candidate;
-        fixLog.push(fix.label + "（部分適用）");
+        // ここでは candidate を破棄し、originalCode ベースを維持
+      }
+    }
+
+    // Step 3: 単独 fix で成功しなかった場合、
+    //   マッチする全 fix を originalCode に順番に重ね掛けして試す
+    if (!succeededCode) {
+      let combined = originalCode;
+      const combinedLabels = [];
+
+      for (const fix of AUTO_FIXES) {
+        if (!fix.pattern.test(combined)) continue;
+        const next = fix.fix(combined);
+        if (next === combined) continue;
+        combined = next;
+        combinedLabels.push(fix.label);
+      }
+
+      if (combinedLabels.length > 0 && combined !== originalCode) {
+        try {
+          await runCode(combined);
+          succeededCode = combined;
+          appliedLabels.push(...combinedLabels);
+          lastErr = null;
+        } catch (err) {
+          lastErr = err;
+        }
       }
     }
 
     runBtn.disabled = false;
     runBtn.textContent = "スライド生成（PPTXダウンロード）";
 
-    if (lastErr) {
-      // 自動修正しても直らなかった場合はエラーを表示
-      let msg = formatError(lastErr, codeInput.value, WRAPPER_LINES);
-      if (fixLog.length > 0) {
-        msg += `\n\n【自動修正を試みましたが解決できませんでした】\n適用: ${fixLog.join(" / ")}`;
-      }
-      errorBox.textContent = msg;
-    } else if (fixLog.length > 0) {
-      // 自動修正で成功した場合はその旨を表示（コードは変更しない）
+    if (succeededCode) {
       errorBox.style.color = "#16a34a";
       errorBox.textContent =
-        `✅ 自動修正でエラーを解決し、ダウンロードしました。\n適用した修正: ${fixLog.join(" / ")}`;
+        `✅ 自動修正でエラーを解決し、ダウンロードしました。\n適用した修正: ${appliedLabels.join(" + ")}`;
       setTimeout(() => {
         errorBox.textContent = "";
         errorBox.style.color = "";
       }, 6000);
+    } else {
+      let msg = formatError(lastErr, originalCode, WRAPPER_LINES);
+      if (appliedLabels.length > 0) {
+        msg += `\n\n【自動修正を試みましたが解決できませんでした】\n試みた修正: ${appliedLabels.join(" / ")}`;
+      }
+      errorBox.textContent = msg;
     }
 
   });
