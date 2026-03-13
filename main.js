@@ -280,67 +280,80 @@ function init() {
   ];
 
   /* ----------------------------------------------------------------
-     pptxgenjs の addShape を安全化したコンストラクタを返す
+     実行前にグローバル PptxGenJS の prototype.addSlide をパッチし、
+     返される slide オブジェクトの addShape を安全化する。
 
-     【重要】new Function("PptxGenJS", code) でユーザーコードを実行すると、
-     コード内の `new PptxGenJS()` はここで渡した SafePptx を指す。
-     SafePptx 内で再び `new PptxGenJS()` と書くと SafePptx 自身を再帰呼び出し
-     してしまう（無限再帰）。
+     【設計方針の変更理由】
+       以前の「SafePptx コンストラクタラッパー」方式では、
+       pptxgen.bundle.js が内部で `this` を使った初期化を行うため、
+       別変数に束縛して `new _RealPptxGenJS()` を呼ぶと
+       `this` が正しく渡らず pres が壊れる問題があった。
 
-     対策：
-       - new Function の引数名を "PptxGenJS" のままにする（ユーザーコードとの互換）
-       - SafePptx の内部では、引数名とは別のクロージャ変数 _RealPptxGenJS で
-         本物のライブラリコンストラクタを参照する
+       新方式：
+         1. ユーザーコードには PptxGenJS をそのまま（グローバル）使わせる
+         2. new Function の引数には何も渡さない
+         3. 実行前に PptxGenJS.prototype.addSlide をパッチして
+            返す slide の addShape を安全化する
+         4. 実行後にパッチを元に戻す（他への影響を防ぐ）
   ---------------------------------------------------------------- */
-  function buildSafePptx() {
-    // new Function に渡す前に本物のコンストラクタをクロージャに束縛しておく
-    const _RealPptxGenJS = PptxGenJS;  // ← グローバルの本物
 
-    return function SafePptx(...args) {
-      // _RealPptxGenJS は SafePptx の外側のクロージャを参照するので再帰しない
-      const pres = new _RealPptxGenJS(...args);
+  // PptxGenJS のプロトタイプをパッチして addSlide が返す slide を安全化
+  function applyPptxPatch() {
+    const proto = PptxGenJS.prototype;
+    if (proto.__origAddSlide) return; // 二重パッチ防止
 
-      if (!pres.shapes) {
-        pres.shapes = pres.ShapeType || {};
+    proto.__origAddSlide = proto.addSlide;
+    proto.addSlide = function(...args) {
+      const slide = proto.__origAddSlide.apply(this, args);
+      if (slide && typeof slide.addShape === "function" && !slide.__patched) {
+        const _origAddShape = slide.addShape.bind(slide);
+        slide.addShape = function(type, opt = {}) {
+          if (!type) {
+            throw new Error(
+              "ShapeType が未指定です\n例: slide.addShape(pres.ShapeType.RECTANGLE,{x:1,y:1,w:1,h:1})"
+            );
+          }
+          opt.x ??= 0;
+          opt.y ??= 0;
+          opt.w ??= 1;
+          opt.h ??= 1;
+          return _origAddShape(type, opt);
+        };
+        slide.__patched = true;
       }
-
-      const _addShape = pres.addShape.bind(pres);
-      pres.addShape = function(type, opt = {}) {
-        if (!type) {
-          throw new Error(
-            "ShapeType が未指定です\n例: slide.addShape(pres.ShapeType.RECTANGLE,{x:1,y:1,w:1,h:1})"
-          );
-        }
-        opt.x ??= 0;
-        opt.y ??= 0;
-        opt.w ??= 1;
-        opt.h ??= 1;
-        return _addShape(type, opt);
-      };
-
-      return pres;
+      return slide;
     };
   }
 
+  function removePptxPatch() {
+    const proto = PptxGenJS.prototype;
+    if (!proto.__origAddSlide) return;
+    proto.addSlide = proto.__origAddSlide;
+    delete proto.__origAddSlide;
+  }
+
   /* ----------------------------------------------------------------
-     コードを実行する（Promise のエラーも含めて reject する）
+     コードを実行する
+     PptxGenJS はグローバルのままユーザーコードに使わせる。
+     new Function の引数は空（ユーザーコードが直接グローバルを参照）。
   ---------------------------------------------------------------- */
   function runCode(code) {
     return new Promise((resolve, reject) => {
       let result;
+      applyPptxPatch();
       try {
-        // 引数名 "PptxGenJS" のまま SafePptx を渡す。
-        // ユーザーコードの `new PptxGenJS()` → SafePptx が呼ばれる。
-        // SafePptx 内部は _RealPptxGenJS（クロージャ）を使うので再帰しない。
-        const fn = new Function("PptxGenJS", `"use strict";\n${code}`);
-        result = fn(buildSafePptx());
+        const fn = new Function(`"use strict";\n${code}`);
+        result = fn();
       } catch (err) {
+        removePptxPatch();
         reject(err);
         return;
       }
       if (result && typeof result.then === "function") {
-        result.then(resolve).catch(reject);
+        result.then(v => { removePptxPatch(); resolve(v); })
+              .catch(e => { removePptxPatch(); reject(e); });
       } else {
+        removePptxPatch();
         resolve(result);
       }
     });
@@ -466,10 +479,9 @@ function init() {
         const rawLine   = Number(m[1]);
         const col       = Number(m[2]);
         // new Function 内では先頭に以下の行が挿入される:
-        //   1行目: 無名関数の宣言（ブラウザ内部）
-        //   2行目: "use strict";
-        // → ユーザーコードの実際の行 = rawLine - 2
-        const userLine  = rawLine - 2;
+        //   1行目: "use strict";  （引数なしのため関数宣言行はカウントしない）
+        // → ユーザーコードの実際の行 = rawLine - 1
+        const userLine  = rawLine - 1;
         const codeLines = code.split("\n");
         const totalLines = codeLines.length;
 
