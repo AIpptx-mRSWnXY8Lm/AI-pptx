@@ -12,6 +12,10 @@ h1 {
   background-color: #FFFF55;
 }
 
+.info a {
+  color: #0000FF;
+}
+
 .prompt-box {
   width: 95%;
   background: #0f172a;
