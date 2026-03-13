@@ -8,6 +8,10 @@ h1 {
   margin-top: 20px;
 }
 
+.info {
+  background-color: #FFFF55;
+}
+
 .prompt-box {
   width: 95%;
   background: #0f172a;
