@@ -129,38 +129,40 @@ function init() {
 
     try {
 
-      const SafePptx = new Proxy(PptxGenJS, {
-        construct(target, args) {
-          const pres = new target(...args);
+      // Proxy を使うと PptxGenJS バンドル版のコンストラクタ内 this が壊れ
+      // "undefined is not an object (evaluating 'this._version=...')" が発生する。
+      // そのため Proxy はやめ、new PptxGenJS() の直後に addShape だけパッチする
+      // 通常の関数ラッパーに差し替える。
+      const SafePptx = function(...args) {
+        const pres = new PptxGenJS(...args);
 
-          if (!pres.shapes) {
-            pres.shapes = pres.ShapeType || {};
-          }
-
-          const originalAddShape = pres.addShape.bind(pres);
-          pres.addShape = function(type, opt = {}) {
-            if (!type) {
-              throw new Error(
-                "ShapeType が未指定です\n例: slide.addShape(pptx.ShapeType.RECTANGLE,{x:1,y:1,w:1,h:1})"
-              );
-            }
-            opt.x ??= 0;
-            opt.y ??= 0;
-            opt.w ??= 1;
-            opt.h ??= 1;
-            return originalAddShape(type, opt);
-          };
-
-          return pres;
+        if (!pres.shapes) {
+          pres.shapes = pres.ShapeType || {};
         }
-      });
+
+        const originalAddShape = pres.addShape.bind(pres);
+        pres.addShape = function(type, opt = {}) {
+          if (!type) {
+            throw new Error(
+              "ShapeType が未指定です\n例: slide.addShape(pptx.ShapeType.RECTANGLE,{x:1,y:1,w:1,h:1})"
+            );
+          }
+          opt.x ??= 0;
+          opt.y ??= 0;
+          opt.w ??= 1;
+          opt.h ??= 1;
+          return originalAddShape(type, opt);
+        };
+
+        return pres;
+      };
 
       const wrapper = new Function(
         "PptxGenJS",
         `"use strict";\n${codeInput.value}`
       );
 
-      // --- 修正: writeFile などの非同期エラーを catch するため戻り値を Promise として扱う ---
+      // writeFile などの非同期エラーを catch するため戻り値を Promise として扱う
       const result = wrapper(SafePptx);
       if (result && typeof result.catch === "function") {
         result.catch(err => {
@@ -185,18 +187,33 @@ function init() {
     msg += `内容: ${err.message}\n`;
 
     if (err.stack) {
-      const m = err.stack.match(/:(\d+):(\d+)/);
-      if (m) {
-        // new Function 内の行番号から「"use strict";\n」の行と
-        // Function 先頭行の計 (wrapperLines + 1) 行を引く
-        const line = Number(m[1]) - (wrapperLines + 1);
-        const col  = m[2];
-        const lines    = code.split("\n");
-        const codeLine = lines[line - 1] || "";
+      // ブラウザによってスタック形式が異なるため複数パターンで試みる
+      // Chrome/Edge: "at <anonymous>:行:列"
+      // Safari:      "新しい関数コード@行:列" もしくは "eval code:行:列"
+      const m = err.stack.match(/<anonymous>:(\d+):(\d+)/)
+             || err.stack.match(/Function(?:Code)?:(\d+):(\d+)/)
+             || err.stack.match(/:(\d+):(\d+)/);
 
-        msg += `\n行: ${line}`;
-        msg += `\n列: ${col}`;
-        msg += `\n\n該当コード:\n${codeLine}`;
+      if (m) {
+        // new Function の行番号は「function 宣言の 1 行」+「"use strict";\n の 1 行」
+        // の計 (wrapperLines + 1) 行分オフセットされている
+        const rawLine = Number(m[1]);
+        const line    = rawLine - (wrapperLines + 1);
+        const col     = m[2];
+
+        // NaN や 0 以下になった場合は行番号を表示しない
+        if (Number.isFinite(line) && line > 0) {
+          const lines    = code.split("\n");
+          const codeLine = lines[line - 1] ?? "";
+
+          msg += `\n行: ${line}`;
+          msg += `\n列: ${col}`;
+          msg += `\n\n該当コード:\n${codeLine}`;
+        } else {
+          // 行が特定できない場合は列のみ表示
+          msg += `\n列: ${col}`;
+          msg += `\n（行番号の特定に失敗しました。ブラウザの開発者ツールでご確認ください）`;
+        }
       }
     }
 
