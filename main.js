@@ -117,6 +117,81 @@ function init() {
   const promputInput    = document.getElementById("promput");
 
   /* ------------------------------
+     行番号付きコードエディタの構築
+  ------------------------------ */
+  (function setupLineNumbers() {
+    const wrapper = document.createElement("div");
+    wrapper.id = "codeEditorWrapper";
+    wrapper.style.cssText = [
+      "display:flex",
+      "align-items:stretch",
+      "margin-top:12px",
+      "border:1px solid #cbd5e1",
+      "border-radius:4px",
+      "overflow:hidden",
+      "background:#fff",
+      "font-family:monospace",
+      "font-size:14px",
+      "line-height:1.5",
+    ].join(";");
+
+    const gutter = document.createElement("div");
+    gutter.id = "lineGutter";
+    gutter.style.cssText = [
+      "min-width:42px",
+      "padding:12px 6px 12px 0",
+      "background:#f1f5f9",
+      "border-right:1px solid #cbd5e1",
+      "color:#94a3b8",
+      "text-align:right",
+      "user-select:none",
+      "overflow:hidden",
+      "flex-shrink:0",
+      "box-sizing:border-box",
+      "line-height:1.5",
+      "font-size:14px",
+      "font-family:monospace",
+    ].join(";");
+
+    codeInput.style.cssText = [
+      "flex:1",
+      "height:320px",
+      "margin:0",
+      "padding:12px 8px",
+      "border:none",
+      "outline:none",
+      "resize:vertical",
+      "font-family:monospace",
+      "font-size:14px",
+      "line-height:1.5",
+      "overflow-y:auto",
+      "box-sizing:border-box",
+      "background:#fff",
+    ].join(";");
+
+    codeInput.parentNode.insertBefore(wrapper, codeInput);
+    wrapper.appendChild(gutter);
+    wrapper.appendChild(codeInput);
+
+    function updateGutter() {
+      const lineCount = codeInput.value.split("\n").length;
+      const numbers = [];
+      for (let i = 1; i <= lineCount; i++) {
+        numbers.push('<div style="padding-right:8px;min-height:1.5em;">' + i + '</div>');
+      }
+      gutter.innerHTML = numbers.join("");
+      gutter.style.height = codeInput.offsetHeight + "px";
+    }
+
+    codeInput.addEventListener("scroll", () => {
+      gutter.scrollTop = codeInput.scrollTop;
+    });
+    codeInput.addEventListener("input", updateGutter);
+    new ResizeObserver(updateGutter).observe(codeInput);
+    updateGutter();
+  })();
+
+  /* ------------------------------
      枚数バリデーション
      --- 修正: 負数・小数・min>max を検出してエラー表示 ---
   ------------------------------ */
@@ -599,6 +674,13 @@ function init() {
   /* ===============================
      全削除ボタン
   =============================== */
+  // 「保存内容一覧」見出しと余白を savedList の前に挿入
+  const savedListSection = document.createElement("div");
+  savedListSection.style.cssText = "margin-top:40px;";
+
+  const savedListHeading = document.createElement("h2");
+  savedListHeading.textContent = "保存内容一覧";
+
   const clearAllBtn = document.createElement("button");
   clearAllBtn.textContent = "保存項目をすべて削除";
   clearAllBtn.onclick = () => {
@@ -606,7 +688,9 @@ function init() {
     PptxStore.clearAll();
     savedList.innerHTML = "";
   };
-  savedList.before(clearAllBtn);
+
+  savedListSection.append(savedListHeading, clearAllBtn);
+  savedList.before(savedListSection);
 
   /* ===============================
      保存
