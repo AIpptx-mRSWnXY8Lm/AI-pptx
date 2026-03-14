@@ -16,6 +16,10 @@ h1 {
   color: #0000FF;
 }
 
+.infoh {
+  display: inline-block;
+}
+
 .prompt-box {
   width: 95%;
   background: #0f172a;
