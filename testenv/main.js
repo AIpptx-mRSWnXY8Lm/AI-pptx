@@ -827,65 +827,67 @@ function init() {
 
     const fileName = extractFileName(code);
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // ★ ダウンロードボタンは arrayBuffer がある時点で即座に設置
-    //   → プレビュー描画の成否に関係なく確実にダウンロード可能にする
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ダウンロードボタンを最初に設置（プレビュー結果に依存しない）
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     downloadTopEl.innerHTML = "";
     downloadBottomEl.innerHTML = "";
     downloadTopEl.appendChild(makeDownloadBtn(arrayBuffer, fileName));
     downloadBottomEl.appendChild(makeDownloadBtn(arrayBuffer, fileName));
-    previewArea.style.display = "block";   // ← ボタン設置と同時に表示
+    previewArea.style.display = "block";
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // 進捗表示ヘルパー
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    function showProgress(pct, msg) {
-      viewerEl.innerHTML = "";
-      const wrap = document.createElement("div");
-      wrap.style.cssText = [
-        "padding:32px 24px;background:#1e293b;border-radius:8px",
-        "border:1px solid #334155;font-family:system-ui,sans-serif",
-        "display:flex;flex-direction:column;align-items:center;gap:16px",
-      ].join(";");
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // 進捗バー（viewerEl とは別の専用 div）
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    const progressEl = document.createElement("div");
+    progressEl.id = "pvProgress";
+    progressEl.style.cssText = [
+      "padding:32px 24px;background:#1e293b;border-radius:8px",
+      "border:1px solid #334155;font-family:system-ui,sans-serif",
+      "display:flex;flex-direction:column;align-items:center;gap:16px",
+      "margin:4px 0",
+    ].join(";");
+    viewerEl.innerHTML = "";
+    viewerEl.appendChild(progressEl);
 
-      const label = document.createElement("div");
-      label.style.cssText = "color:#94a3b8;font-size:14px;";
-      label.textContent = msg;
+    const progressLabel   = document.createElement("div");
+    const progressBarWrap = document.createElement("div");
+    const progressBar     = document.createElement("div");
+    const progressPct     = document.createElement("div");
+    progressLabel.style.cssText   = "color:#94a3b8;font-size:14px;";
+    progressBarWrap.style.cssText = "width:360px;max-width:90%;height:8px;background:#334155;border-radius:4px;overflow:hidden;";
+    progressBar.style.cssText     = "height:100%;border-radius:4px;background:#4f46e5;width:0%;transition:width .25s ease;";
+    progressPct.style.cssText     = "color:#e2e8f0;font-size:22px;font-weight:bold;font-family:monospace;";
+    progressBarWrap.appendChild(progressBar);
+    progressEl.append(progressLabel, progressBarWrap, progressPct);
 
-      const barWrap = document.createElement("div");
-      barWrap.style.cssText = "width:360px;max-width:90%;height:8px;background:#334155;border-radius:4px;overflow:hidden;";
-      const bar = document.createElement("div");
-      bar.style.cssText = `height:100%;border-radius:4px;background:#4f46e5;width:${pct}%;transition:width .3s;`;
-      barWrap.appendChild(bar);
-
-      const pctLabel = document.createElement("div");
-      pctLabel.style.cssText = "color:#e2e8f0;font-size:22px;font-weight:bold;font-family:monospace;";
-      pctLabel.textContent = `${Math.round(pct)}%`;
-
-      wrap.append(label, barWrap, pctLabel);
-      viewerEl.appendChild(wrap);
+    function setProgress(pct, msg) {
+      progressLabel.textContent  = msg;
+      progressBar.style.width    = pct + "%";
+      progressPct.textContent    = Math.round(pct) + "%";
     }
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // JSZip で解凍（進捗: 0→30%）
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    showProgress(5, "PPTXを解析中...");
-    await new Promise(r => setTimeout(r, 0)); // 描画を先に反映
+    function tick() { return new Promise(r => setTimeout(r, 0)); }
 
+    setProgress(5, "PPTXを解析中...");
+    await tick();
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // JSZip で解凍
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     let zip;
     try {
       zip = await JSZip.loadAsync(arrayBuffer);
     } catch (e) {
-      viewerEl.innerHTML = `<div style="padding:24px;color:#f87171;font-size:13px;">⚠ プレビュー解析に失敗: ${e.message}<br>ダウンロードボタンからは取得できます。</div>`;
+      viewerEl.innerHTML = `<div style="padding:24px;color:#f87171;font-size:13px;font-family:system-ui;">⚠ プレビュー解析に失敗しました: ${e.message}<br>上のダウンロードボタンからファイルを取得できます。</div>`;
       return;
     }
-    showProgress(30, "スライド構造を読み込み中...");
-    await new Promise(r => setTimeout(r, 0));
+    setProgress(30, "スライド構造を読み込み中...");
+    await tick();
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // スライドサイズ取得（進捗: 35%）
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // スライドサイズ取得
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     let slideW = 12192000 / 914400 * 96; // LAYOUT_WIDE デフォルト
     let slideH =  6858000 / 914400 * 96;
     try {
@@ -897,12 +899,12 @@ function init() {
         slideH = emuToPx(sldSz.getAttribute("cy"));
       }
     } catch(e) {}
-    showProgress(35, "スライドファイルを検索中...");
-    await new Promise(r => setTimeout(r, 0));
+    setProgress(35, "スライドファイルを検索中...");
+    await tick();
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // スライドXMLをソート（★ slide(\d+).xml で正確に番号抽出）
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // スライドXMLをソート（slide(\d+).xml で正確に番号抽出）
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     const slideFiles = Object.keys(zip.files)
       .filter(f => /^ppt\/slides\/slide\d+\.xml$/.test(f))
       .sort((a, b) => {
@@ -912,33 +914,32 @@ function init() {
       });
 
     if (slideFiles.length === 0) {
-      viewerEl.innerHTML = `<div style="padding:24px;color:#fbbf24;font-size:13px;">⚠ スライドが見つかりませんでした。ダウンロードして直接確認してください。</div>`;
+      viewerEl.innerHTML = `<div style="padding:24px;color:#fbbf24;font-size:13px;font-family:system-ui;">⚠ スライドが見つかりませんでした。ダウンロードして直接確認してください。</div>`;
       return;
     }
-    showProgress(40, `${slideFiles.length}枚のスライドを発見...`);
-    await new Promise(r => setTimeout(r, 0));
+    setProgress(40, `${slideFiles.length}枚のスライドを発見...`);
+    await tick();
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // 全スライドXMLを先読みしてキャッシュ（進捗: 40→85%）
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // 全XMLを先読みしてキャッシュ（進捗: 40→85%）
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     const xmlCache = new Array(slideFiles.length).fill(null);
     for (let i = 0; i < slideFiles.length; i++) {
       try {
         xmlCache[i] = await zip.file(slideFiles[i]).async("text");
       } catch(e) {}
       const pct = 40 + ((i + 1) / slideFiles.length) * 45;
-      showProgress(pct, `スライドを読み込み中... (${i + 1}/${slideFiles.length})`);
-      // 毎回 await で描画機会を与える
-      await new Promise(r => setTimeout(r, 0));
+      setProgress(pct, `スライドを読み込み中... (${i + 1}/${slideFiles.length})`);
+      await tick();
     }
 
-    showProgress(90, "プレビューを構築中...");
-    await new Promise(r => setTimeout(r, 0));
+    setProgress(87, "プレビューを構築中...");
+    await tick();
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // ビューワー UI を構築
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    viewerEl.innerHTML = "";
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ★ 進捗表示を消してビューワーUIを構築
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    viewerEl.innerHTML = "";   // progressEl ごと消す（UIと干渉しない）
     viewerEl.style.cssText = [
       "border:1px solid #334155",
       "border-radius:8px",
@@ -993,6 +994,7 @@ function init() {
         "background:#334155;color:#e2e8f0;border:none",
         "width:34px;height:34px;border-radius:6px",
         "font-size:18px;cursor:pointer;line-height:1",
+        "margin-top:0",
       ].join(";");
       b.onmouseenter = () => { if (!b.disabled) b.style.background = "#4f46e5"; };
       b.onmouseleave = () => { if (!b.disabled) b.style.background = "#334155"; };
@@ -1016,8 +1018,8 @@ function init() {
       nextBtn.disabled = idx === slideFiles.length - 1;
       prevBtn.style.opacity  = idx === 0 ? "0.3" : "1";
       nextBtn.style.opacity  = idx === slideFiles.length - 1 ? "0.3" : "1";
-      prevBtn.style.background = "#334155";
-      nextBtn.style.background = "#334155";
+      prevBtn.style.background  = "#334155";
+      nextBtn.style.background  = "#334155";
     }
 
     function showMainSlide(idx) {
@@ -1033,7 +1035,6 @@ function init() {
 
       updateNav(idx);
 
-      // サムネイルのアクティブ状態
       sidebar.querySelectorAll(".pv-thumb").forEach((t, i) => {
         t.style.borderColor = i === idx ? "#4f46e5" : "transparent";
         t.style.boxShadow   = i === idx ? "0 0 0 1px #4f46e5" : "none";
@@ -1051,9 +1052,9 @@ function init() {
       if (e.key === "ArrowLeft"  || e.key === "ArrowUp")   { e.preventDefault(); prevBtn.click(); }
     };
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // サムネイル描画（キャッシュ済みXMLから同期的に生成）
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // サムネイル（キャッシュ済みXMLから同期描画）
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     for (let i = 0; i < slideFiles.length; i++) {
       const thumb = document.createElement("div");
       thumb.className = "pv-thumb";
@@ -1091,15 +1092,11 @@ function init() {
       sidebar.appendChild(thumb);
     }
 
-    showProgress(98, "完了！");
-    await new Promise(r => setTimeout(r, 80));
-
-    // 1枚目を表示
+    // 1枚目を表示してスクロール
     showMainSlide(0);
-
-    // プレビューにスクロール
     previewArea.scrollIntoView({ behavior: "smooth", block: "start" });
   }
+
   /* ----------------------------------------------------------------
      エラー整形
   ---------------------------------------------------------------- */
