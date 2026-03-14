@@ -16,6 +16,16 @@ h1 {
   color: #0000FF;
 }
 
+.info details {
+  border: solid 1px #000000;
+  margin: 5px 0;
+}
+
+.info summary {
+  text-decoration: underline;
+  font-weight: bold;
+}
+
 .prompt-box {
   width: 95%;
   background: #0f172a;
