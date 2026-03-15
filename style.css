@@ -27,10 +27,14 @@ h1 {
 
 .info h4 {
   margin-bottom: 0;
+  margin-left: 1em;
+  margin-right: 1em;
 }
 
 .info p {
   margin-top: 0;
+  margin-left: 1em;
+  margin-right: 1em;
 }
 
 .prompt-box {
@@ -102,4 +106,20 @@ button {
 /* 保存内容一覧のh2前余白 */
 #savedList {
   margin-top: 8px;
+}
+
+/* PPTXプレビューエリア */
+#previewArea {
+  margin-top: 20px;
+}
+#previewDownloadTop,
+#previewDownloadBottom {
+  margin: 4px 0;
+}
+#pptxViewer:focus {
+  outline: 2px solid #4f46e5;
+  outline-offset: 2px;
+}
+#pptxViewer .pv-thumb:hover {
+  border-color: #6366f1 !important;
 }
