@@ -195,7 +195,7 @@ button {
     if (app && !document.getElementById("sp-switch-banner")) {
       // 現在のURLの sp ファイル名を PC ファイル名に置換したリンクを生成
       var pcUrl = location.href
-        .replace(/0001_sp\.html/, "0001_SwAjHqU.html")
+        .replace(/0006_OiHbyxI_sp\.html/, "0006_OiHbyxI\.html")
         .replace(/[?&]noredirect=1/, "");
       // noredirect=1 を付けてPC版でrouter.jsが再リダイレクトしないようにする
       pcUrl += (pcUrl.indexOf("?") >= 0 ? "&" : "?") + "noredirect=1";
