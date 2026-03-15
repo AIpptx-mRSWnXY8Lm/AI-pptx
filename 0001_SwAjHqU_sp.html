@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <head prefix="og: https://ogp.me/ns#">
+  <meta property="og:url" content="https://aipptx-mrswnxy8lm.github.io/AI-pptx/0001_SwAjHqU_sp.html">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="AIスライド生成支援ツール①（スマホ版）">
+  <meta property="og:description" content="本サイトは、AIでスライドを生成したいと思っている方に、「無料で」「簡単に」「高品質な」「PowerPoint」を作ることをサポートするツールです。">
+  <meta property="og:image" content="https://aipptx-mrswnxy8lm.github.io/AI-pptx/OGPimg.jpeg">
+  <!-- Google tag -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-MESVNVQ731"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-MESVNVQ731');
+  </script>
+
+  <meta charset="UTF-8">
+  <!-- viewport はここでは控えめに設定し、sp_style.js が上書きする -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AIスライド生成支援ツール①</title>
+
+  <link rel="icon" href="favicon.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+
+  <!-- 共通スタイル（PC版と同じ） -->
+  <link rel="stylesheet" href="style.css">
+
+  <!--
+    sp_style.js: スマホ専用スタイルを <style> タグで注入する。
+    style.css より後に実行されることで上書き適用される。
+    <head> 内で先に読み込んでおくことで、DOMContentLoaded より早く viewport を設定できる。
+  -->
+  <script src="sp_style.js"></script>
+</head>
+<body>
+<header style="background:#CCFFFF;"><h2>AIスライド生成支援ツール①</h2></header>
+<div id="app"></div>
+
+<script>
+/* 共通の app.html を fetch して挿入し、main.js を動的ロード（PC版と完全に同じ） */
+fetch("common/app.html")
+  .then(r => r.text())
+  .then(html => {
+    document.getElementById("app").innerHTML = html;
+
+    const script = document.createElement("script");
+    script.src = "main.js";
+    document.body.appendChild(script);
+
+    /* main.js ロード完了を通知（main.js 内の appReady イベント待ち受けと合わせる） */
+    script.onload = () => {
+      document.dispatchEvent(new Event("appReady"));
+    };
+  });
+</script>
+
+<!-- pptxgenjs（PC版と同じバージョン） -->
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+<!-- JSZip: PPTXプレビュー用（PC版と同じ） -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+</body>
+</html>
