@@ -4,7 +4,7 @@
  * どちらのHTMLに置いても動作する PC / スマホ 自動振り分けスクリプト。
  *
  * ■ 配置方法
- *   PC版 (0001_SwAjHqU.html) と スマホ版 (0001_SwAjHqU_sp.html) の
+ *   PC版 (0006_OiHbyxI.html) と スマホ版 (0006_OiHbyxI_sp.html) の
  *   両方の <head> 内で最初に読み込む。
  *
  * ■ 動作
@@ -18,8 +18,8 @@
 (function () {
   "use strict";
 
-  var PC_PAGE = "0001_SwAjHqU.html";
-  var SP_PAGE = "0001_SwAjHqU_sp.html";
+  var PC_PAGE = "0006_OiHbyxI.html";
+  var SP_PAGE = "0006_OiHbyxI_sp.html";
 
   // ?noredirect=1 があればスキップ（手動で「PC版を見る」等に使う）
   if (/[?&]noredirect=1/.test(location.search)) return;
