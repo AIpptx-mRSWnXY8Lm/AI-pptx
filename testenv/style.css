@@ -1,11 +1,10 @@
 body {
   font-family: system-ui, sans-serif;
-  padding: 20px;
   background: #f8fafc;
 }
 
 h1 {
-  margin-top: 20px;
+  font-size: 3em;
 }
 
 .info {
