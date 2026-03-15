@@ -18,28 +18,59 @@
 
     <meta charset="UTF-8">
         <title>AIスライド生成支援ツール①</title>
-
         <link rel="icon" href="favicon.ico">
         <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+        <script src="router.js"></script>
         <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <header style="background:#CCFFFF;"><h2>AIスライド生成支援ツール⑥</h2></header>
     <div id="app"></div>
     
-    <script>
-        fetch("common/app.html")
-            .then(r => r.text())
-            .then(html => {
-                document.getElementById("app").innerHTML = html;
-                const script = document.createElement("script");
-                script.src = "main.js";
-                document.body.appendChild(script);
-            });
-    </script>
-    
-    <!-- pptxgenjs -->
-    <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
-
+<script>
+fetch("common/app.html")
+.then(r => r.text())
+.then(html => {
+  document.getElementById("app").innerHTML = html;
+ 
+  const script = document.createElement("script");
+  script.src = "main.js";
+  document.body.appendChild(script);
+ 
+  // PC版に「スマホ版で見る」バナーを挿入
+  const app = document.getElementById("app");
+  if (app && !document.getElementById("pc-switch-banner")) {
+    const spUrl = location.href
+      .replace(/0001_SwAjHqU\.html/, "0001_sp.html")
+      .replace(/[?&]noredirect=1/, "");
+    const spUrlFinal = spUrl + (spUrl.indexOf("?") >= 0 ? "&" : "?") + "noredirect=1";
+ 
+    const banner = document.createElement("div");
+    banner.id = "pc-switch-banner";
+    banner.style.cssText = [
+      "background:#e0f2fe",
+      "border:1px solid #7dd3fc",
+      "border-radius:6px",
+      "padding:8px 12px",
+      "margin-bottom:10px",
+      "font-size:13px",
+      "display:flex",
+      "align-items:center",
+      "justify-content:space-between",
+      "gap:8px"
+    ].join(";");
+    banner.innerHTML =
+      '<span>🖥️ PC版を表示中</span>' +
+      '<a href="' + spUrlFinal + '" style="color:#0369a1;white-space:nowrap;font-weight:bold;text-decoration:none;">スマホ版で見る →</a>';
+    app.insertBefore(banner, app.firstChild);
+  }
+});
+</script>
+ 
+<!-- pptxgenjs -->
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+<!-- JSZip: PPTXプレビュー用 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+ 
 </body>
 </html>
