@@ -27,10 +27,14 @@ h1 {
 
 .info h4 {
   margin-bottom: 0;
+  margin-left: 1em;
+  margin-right: 1em;
 }
 
 .info p {
   margin-top: 0;
+  margin-left: 1em;
+  margin-right: 1em;
 }
 
 .prompt-box {
