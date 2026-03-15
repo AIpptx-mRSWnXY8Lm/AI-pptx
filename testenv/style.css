@@ -26,6 +26,14 @@ h1 {
   font-weight: bold;
 }
 
+.info h4 {
+  margin-bottom: 0;
+}
+
+.info p {
+  margin-top: 0;
+}
+
 .prompt-box {
   width: 95%;
   background: #0f172a;
