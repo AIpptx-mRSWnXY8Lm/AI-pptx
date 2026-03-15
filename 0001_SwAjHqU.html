@@ -1,46 +1,45 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <head prefix="og: https://ogp.me/ns#">
-  <meta property="og:url" content="https://aipptx-mrswnxy8lm.github.io/AI-pptx/0001_SwAjHqU.html">
-  <meta property="og:type" content="article">
-  <meta property="og:title" content="AIスライド生成支援ツール①">
-  <meta property="og:description" content="本サイトは、AIでスライドを生成したいと思っている方に、「無料で」「簡単に」「高品質な」「PowerPoint」を作ることをサポートするツールです。">
-  <meta property="og:image" content="https://aipptx-mrswnxy8lm.github.io/AI-pptx/OGPimg.jpeg">
-  <!-- Google tag -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-MESVNVQ731"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', 'G-MESVNVQ731');
-  </script>
+    <head prefix="og: https://ogp.me/ns#">
+    <meta property="og:url" content="https://aipptx-mrswnxy8lm.github.io/AI-pptx/0001_SwAjHqU.html">
+    <meta property="og:type" content="article">
+    <meta property="og:title" content="AIスライド生成支援ツール①">
+    <meta property="og:description" content="本サイトは、AIでスライドを生成したいと思っている方に、「無料で」「簡単に」「高品質な」「PowerPoint」を作ることをサポートするツールです。">
+    <meta property="og:image" content="https://aipptx-mrswnxy8lm.github.io/AI-pptx/OGPimg.jpeg">
+    <!-- Google tag -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-MESVNVQ731"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-MESVNVQ731');
+    </script>
 
-  <meta charset="UTF-8">
-  <title>AIスライド生成支援ツール①</title>
+    <meta charset="UTF-8">
+        <title>AIスライド生成支援ツール①</title>
 
-  <link rel="icon" href="favicon.ico">
-  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
-  <link rel="stylesheet" href="style.css">
+        <link rel="icon" href="favicon.ico">
+        <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+        <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
-<div id="app"></div>
-
-<script>
-fetch("common/app.html")
-.then(r => r.text())
-.then(html => {
-  document.getElementById("app").innerHTML = html;
-
-  const script = document.createElement("script");
-  script.src = "main.js";
-  document.body.appendChild(script);
-});
-</script>
-
-<!-- pptxgenjs -->
-<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+    <div id="app"></div>
+    <header style="background:#CCFFFF;"><h2>AIスライド生成支援ツール① (山村先生用)</h2></header>
+    
+    <script>
+        fetch("common/app.html")
+            .then(r => r.text())
+            .then(html => {
+                document.getElementById("app").innerHTML = html;
+                const script = document.createElement("script");
+                script.src = "main.js";
+                document.body.appendChild(script);
+            });
+    </script>
+    
+    <!-- pptxgenjs -->
+    <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
 
 </body>
 </html>
