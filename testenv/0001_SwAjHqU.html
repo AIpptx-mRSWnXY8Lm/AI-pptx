@@ -1,21 +1,13 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <!-- ★ viewport: スマホ幅に最適化 -->
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-
-  <!-- ★ router.js を最初に読み込み（PCからのアクセスをPC版に戻す） -->
-  <script src="router.js"></script>
-
-  <!-- OGP -->
-  <meta property="og:url" content="https://aipptx-mrswnxy8lm.github.io/AI-pptx/0001_sp.html">
+  <head prefix="og: https://ogp.me/ns#">
+  <meta property="og:url" content="https://aipptx-mrswnxy8lm.github.io/AI-pptx/0001_SwAjHqU.html">
   <meta property="og:type" content="article">
-  <meta property="og:title" content="AIスライド生成支援ツール① (スマホ版)">
-  <meta property="og:description" content="AIでPowerPointスライドを生成するツールのスマホ版です。">
+  <meta property="og:title" content="AIスライド生成支援ツール①">
+  <meta property="og:description" content="本サイトは、AIでスライドを生成したいと思っている方に、「無料で」「簡単に」「高品質な」「PowerPoint」を作ることをサポートするツールです。">
   <meta property="og:image" content="https://aipptx-mrswnxy8lm.github.io/AI-pptx/OGPimg.jpeg">
-
-  <!-- Google tag (PC版と同じ計測ID) -->
+  <!-- Google tag -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-MESVNVQ731"></script>
   <script>
     window.dataLayer = window.dataLayer || [];
@@ -24,45 +16,32 @@
     gtag('config', 'G-MESVNVQ731');
   </script>
 
-  <title>AIスライド生成支援ツール① (スマホ版)</title>
+  <meta charset="UTF-8">
+  <title>ﾃｽﾄ-AIスライド生成支援ツール①</title>
 
   <link rel="icon" href="favicon.ico">
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
-
-  <!-- ① PC版と共通のスタイル -->
+  <!-- ★ router.js: スマホからのアクセスをスマホ版に振り分け -->
+  <script src="router.js"></script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
-<header style="background:#CCFFFF;">
-  <h2 style="margin:0;padding:10px 12px;font-size:1.1em;">
-    AIスライド生成支援ツール① <span style="font-size:0.85em;color:#555;">(スマホ版)</span>
-  </h2>
-</header>
-
+<header style="background:#CCFFFF;"><h2>ﾃｽﾄ-AIスライド生成支援ツール① (自分用)</h2></header>
 <div id="app"></div>
 
 <script>
-// ② PC版と共通の app.html を fetch して注入
 fetch("common/app.html")
-  .then(function(r){ return r.text(); })
-  .then(function(html){
-    document.getElementById("app").innerHTML = html;
+.then(r => r.text())
+.then(html => {
+  document.getElementById("app").innerHTML = html;
 
-    // ③ PC版と共通の main.js を読み込む
-    var mainScript = document.createElement("script");
-    mainScript.src = "main.js";
-    document.body.appendChild(mainScript);
-
-    // ④ スマホ専用スタイルを main.js の直後に読み込む
-    //    （main.js が appReady を発火した後に setupSP() が走る）
-    var spScript = document.createElement("script");
-    spScript.src = "sp_style.js";
-    document.body.appendChild(spScript);
-  });
+  const script = document.createElement("script");
+  script.src = "main.js";
+  document.body.appendChild(script);
+});
 </script>
 
-<!-- pptxgenjs（PC版と同じバージョン） -->
+<!-- pptxgenjs -->
 <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
 <!-- JSZip: PPTXプレビュー用 -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
