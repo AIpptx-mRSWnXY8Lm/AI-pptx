@@ -38,6 +38,34 @@ fetch("common/app.html")
   const script = document.createElement("script");
   script.src = "main.js";
   document.body.appendChild(script);
+
+  // PC版に「スマホ版で見る」バナーを挿入
+  const app = document.getElementById("app");
+  if (app && !document.getElementById("pc-switch-banner")) {
+    const spUrl = location.href
+      .replace(/0001_SwAjHqU\.html/, "0001_sp.html")
+      .replace(/[?&]noredirect=1/, "");
+    const spUrlFinal = spUrl + (spUrl.indexOf("?") >= 0 ? "&" : "?") + "noredirect=1";
+
+    const banner = document.createElement("div");
+    banner.id = "pc-switch-banner";
+    banner.style.cssText = [
+      "background:#e0f2fe",
+      "border:1px solid #7dd3fc",
+      "border-radius:6px",
+      "padding:8px 12px",
+      "margin-bottom:10px",
+      "font-size:13px",
+      "display:flex",
+      "align-items:center",
+      "justify-content:space-between",
+      "gap:8px"
+    ].join(";");
+    banner.innerHTML =
+      '<span>🖥️ PC版を表示中</span>' +
+      '<a href="' + spUrlFinal + '" style="color:#0369a1;white-space:nowrap;font-weight:bold;text-decoration:none;">スマホ版で見る →</a>';
+    app.insertBefore(banner, app.firstChild);
+  }
 });
 </script>
 
