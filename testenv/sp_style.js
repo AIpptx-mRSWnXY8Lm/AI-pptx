@@ -193,11 +193,18 @@ button {
     // ── 2-1. 「PC版で見る」バナーを最上部に挿入 ──
     var app = document.getElementById("app");
     if (app && !document.getElementById("sp-switch-banner")) {
+      // 現在のURLの sp ファイル名を PC ファイル名に置換したリンクを生成
+      var pcUrl = location.href
+        .replace(/0001_sp\.html/, "0001_SwAjHqU.html")
+        .replace(/[?&]noredirect=1/, "");
+      // noredirect=1 を付けてPC版でrouter.jsが再リダイレクトしないようにする
+      pcUrl += (pcUrl.indexOf("?") >= 0 ? "&" : "?") + "noredirect=1";
+
       var banner = document.createElement("div");
       banner.id = "sp-switch-banner";
       banner.innerHTML =
         '<span>📱 スマホ版を表示中</span>' +
-        '<a href="?noredirect=1">PC版で見る →</a>';
+        '<a href="' + pcUrl + '">PC版で見る →</a>';
       app.insertBefore(banner, app.firstChild);
     }
 
