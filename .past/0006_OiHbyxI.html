@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- ★ router.js を最初に読み込む（スマホからのアクセスをSP版に振り分け） -->
+  <script src="common/router.js"></script>
+
+  <head prefix="og: https://ogp.me/ns#">
+  <meta property="og:url" content="https://aipptx-mrswnxy8lm.github.io/AI-pptx/0006_OiHbyxI.html">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="AIスライド生成支援ツール⑥">
+  <meta property="og:description" content="本サイトは、AIでスライドを生成したいと思っている方に、「無料で」「簡単に」「高品質な」「PowerPoint」を作ることをサポートするツールです。">
+  <meta property="og:image" content="https://aipptx-mrswnxy8lm.github.io/AI-pptx/OGPimg.jpeg">
+
+  <!-- Google tag -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-MESVNVQ731"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-MESVNVQ731');
+  </script>
+
+  <title>ﾃｽﾄAIスライド生成支援ツール⑥</title>
+  <link rel="icon" href="favicon.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="common/style.css">
+</head>
+<body>
+<header style="background:#CCFFFF;"><h2>ﾃｽﾄAIスライド生成支援ツール⑥ (自分用)</h2></header>
+<div id="app"></div>
+
+<script>
+fetch("common/app.html")
+  .then(r => r.text())
+  .then(html => {
+    document.getElementById("app").innerHTML = html;
+    const script = document.createElement("script");
+    script.src = "common/main.js";
+    document.body.appendChild(script);
+  });
+</script>
+
+<!-- pptxgenjs -->
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+<!-- JSZip: PPTXプレビュー用 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</body>
+</html>
