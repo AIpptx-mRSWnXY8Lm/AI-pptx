@@ -1,0 +1,160 @@
+<h1>AIスライド生成支援ツール</h1>
+<div class="info">
+  <h2>お知らせ</h2>
+  <details class="infod" open>
+    <summary class="infos">アンケートのお願い</summary>
+    <p>当サイト＆生成されたスライドに関するアンケートに、回答していただきたいです（任意ではありますが、先生方の意見を聞いてみたいと思っているので、できるだけお願いします）。<br>アンケートのURLは　<a href="https://forms.gle/cX8idp2cxHVkgTr69" target="_blank">https://forms.gle/cX8idp2cxHVkgTr69</a>　です。</p>
+  </details>
+  <details class="infod">
+    <summary class="infos">現段階で実装を目指している機能について</summary>
+    <p>現在実装を目指している機能についてまとめているので、ご覧ください。</p>
+    <h4>①コード修正機能の強化</h4>
+    <p>&emsp;「コード修正機能」は入力されたコードを実行した際にエラーが生じた場合、事前にプログラムしておいた方法に沿って、入力コードを自動で修正してダウンロードできるようにする機能。ただ、事前に起こりそうなエラーを予測して解消方法を一つひとつプログラムしなければならないため、まだ完全ではなく、対応可能なエラー修正方法の登録や未知のエラー遭遇時の挙動改善などを完成させたい。</p>
+    <h4>②スライドのプレビュー機能</h4>
+    <p>
+      &emsp;ユーザーがAIと対話を重ねてスライドを完成させるときに、毎回ダウンロードされると面倒なので、作ったスライドのプレビュー機能を搭載し、簡単にスライド改善ができるようにしたい。<br>
+      &emsp;<span style="color:red; font-weight:bold; text-decoration:underline;">【追記】</span><br>
+      &emsp;この機能は完成し、テスト環境で動作確認ができたため、週明け頃の実装を予定している。
+    </p>
+    <h4>③プロンプトの質の向上</h4>
+    <p>&emsp;現在のプロンプトではAIによって、出来たスライドのクオリティがかなり異なる。そのため、高クオリティスライドを作るAIに対して、どのようなプロンプトだと低クオリティスライドを作るAIでも高クオリティのスライドが作れるかを聞いてみるなどして、プロンプトの質の向上を目指している。ただ、この内容はかなり難しく、なかなかうまくいかないので、GSのテーマに「どうすればAIに人間の感覚を身につけさせられるか」を掲げて探究することも検討している。</p>
+    <h4>④スマホ版サイトの作成</h4>
+    <p>
+      &emsp;現在のサイトは、主にPC・タブレット端末での使用を想定して作られており、スマホで使うと枠や文字などが小さく、操作性が悪い。そのため、スマホ版サイトを作り、アクセスしやすくしたいと考えている。<br>
+      &emsp;<span style="color:red; font-weight:bold; text-decoration:underline;">【追記】</span><br>
+      &emsp;この機能は完成し、テスト環境で動作確認ができたため、週明け頃の実装を予定している。
+    </p>
+    <h4 style="text-decoration:line-through;">⑤AIサイトの埋め込み</h4>
+    <p>
+      <span style="text-decoration: line-through;">&emsp;現在のバージョンでは、AIサイトとこのサイトを行き来する手間があり、このサイト内にAIサイトを埋め込み、その手間を省ければより便利になると考えている。「サイトの埋め込み」は、企業のホームページなどで、YouTubeを開かなくてもサイト内でYouTube動画を見れるのと同じシステムだが、AIサイトがそれに対応しているかや、アカウントログインなどで問題が起きないかなどを調べた上で、可能であれば実現したいと考えている。</span><br>
+      &emsp;<span style="color:red; font-weight:bold; text-decoration:underline;">【追記】</span<br>
+      &emsp;この機能は、AIサイトがページの埋め込みを禁止しているため、技術的に不可能なことがわかった。
+    </p>
+  </details>
+</div>
+<section>
+  <h2>プロンプト作成</h2>
+  <pre class="prompt-box" id="prompt">## 【指示】
+あなたはプロのプレゼンデザイナー兼JavaScriptエンジニアです。
+以下の【スライドの内容】に基づくPowerPointを作るためのpptxgenjsのコードを書いてください。
+ただし、以下の【プログラムにおける規則】, 【デザインの原則】, 【その他の条件】を必ず全て守り、結果のみを出力してください。
+---
+<details>
+<summary>## 【プログラムにおける規則】</summary>
+## 【プログラムにおける規則】
+- コードを生成した後、そのコードは実行せずに、そのままコードのみを出力して終了すること
+- コードを生成した後、そのコードをPowerPointにしてはいけない
+- pptxgenjs を必ず使うこと
+- import を書いてはいけない
+- 結果はコードブロックに出力すること
+- 図形（長方形・線など）は省略記法（rect, line, ellipse 等）を一切使用しないこと
+- defineSlideMaster や addSlide 内の objects では、必ず以下の公式使用通りの正式記法で記述すること
+  ```
+  {
+  shape: pres.shapes.RECTANGLE,
+  x: 数値または'%',
+  y: 数値または'%',
+  w: 数値または'%',
+  h: 数値,
+  fill: { color: '16進数カラー' }
+  }
+  ```
+- shape プロパティを省略したコードは禁止
+- pptxgen.shapes.LINE / pres.shapes.RECTANGLE など、公式 enum を必ず明示すること
+- 「短縮形」「新しい書き方」「最近のサンプル由来の省略構文」は使用しないこと
+- Missing/Invalid shape parameter エラーが発生しないことを最優先にすること
+- ブラウザで動く書き方にすること
+- html や css を一切書いてはいけない
+- require を使ってはいけない
+- new PptxGenJS() を使うこと
+- pres.writeFile() まで含めること
+- console.log や説明文を書いてはいけない
+- 図形は slide.addShape(pres.shapes.XXXX, {...}) の形式で書くこと
+</details>---
+<details>
+<summary>## 【デザインの原則】</summary>
+## 【デザインの原則】
+### 原則1：色に「意味」を持たせる
+- 全スライドで一貫したカラーパレットを1つ決める
+- 「肯定・推奨」→ 緑系、「否定・問題」→ 赤系、「データ・未確定」→ 黄色、
+  「強調・結論」→ アクセントカラー のように色と意味を対応させる
+- 装飾目的だけの色使いは禁止
+### 原則2：毎スライドで異なるレイアウトを使う
+以下のパターンを組み合わせ、同じ構造を2スライド以上連続させない
+- 左右2カラム（比較・対比）
+- カードグリッド（2×2, 2×3）
+- ステップフロー（矢印つき横並び）
+- 左アクセントバー付き引用ブロック
+- 番号バッジ付きリスト
+### 原則3：フォントサイズで視線を誘導する
+- タイトル：36〜40pt
+- セクション見出し：24〜27pt
+- 本文：15〜18pt
+- 強調数値・キーワード：28〜36pt
+- 同じサイズのテキストを3行以上並べない
+### 原則4：比較・対立はかならず視覚化する
+- 「AではなくB」という構造は、左右に並べて色・アイコンで明示する
+- ✗（赤）と ✓（緑）を使い、どちらが採用されたかを一目で分かるようにする
+- テキストで「〜が問題」と書くだけでなく、形と色でも伝える
+### 原則5：抽象的な結論には必ず根拠を添える
+- 「最適と判断した」→ 必ず理由を3点以上箇条書きで添える
+- 「問題がある」→ 具体的に何が問題かを明記する
+- 1スライドに1文だけ書くのは禁止。最低3つの情報を載せる
+### 原則6：全スライドに統一ヘッダーを設ける
+- 全スライドの最上部（y:0）に同じ色のヘッダーバーを配置する
+- ヘッダーの高さ・色・フォントは全スライドで統一する
+- 表紙・参考文献も例外なく同じルールを適用する
+### 原則7：データが必要な箇所は黄色矩形で明示する
+- 統計・グラフ・地図など実データが入る予定の箇所には
+  背景色が yellow の長方形を置き、「何を表すデータか」を内部に記載する
+  
+### 原則8：禁止事項
+- 全スライドで同一レイアウトの繰り返し
+- タイトル＋大きな矩形＋1〜2文テキストのみの構成
+- 意味のない色の使用（装飾だけの彩色）
+- フォントサイズの差が15pt未満のテキスト群
+</details>---
+<details>
+<summary>## 【その他の条件】</summary>
+## 【その他の条件】
+- 定義,背景,理由などを勝手に省略せず、明示すること
+- 【スライドの内容】に含まれない内容をハルシネーションしてはいけない
+- スライドページの幅や高さを考慮し、各要素やフォントのサイズをはみ出さないように設定すること
+- 説明文は十分な分量を許容する</details>
+- スライドの枚数は<input type="text" pattern="\d*" inputmode="numeric" size="4" id="min">枚以上<input type="text" pattern="\d*" inputmode="numeric" size="4" id="max">枚以下とする
+<span class="ikanoran" id="ikanoran"><b>以下の欄にここに書かれていない「カスタム条件」を記入し、プロンプトに反映させることもできます。</b></span>
+<textarea rows="5" placeholder='カスタム条件入力欄("- "[半角ﾊｲﾌﾝ+ｽﾍﾟｰｽ]で箇条書きを表せます)' id="demand" class="promput"></textarea>
+---
+ 
+## 【スライドの内容】
+<textarea rows="5" placeholder="生成したいスライドの内容（テーマ・構成など）を入力" id="promput" class="promput"></textarea>
+</pre>
+  <div class="AIbuttons">
+    <button onclick="copyButton()" id="copybutton">コピーする</button>
+    <button onclick="window.open('https://chatgpt.com/', '_blank', 'noopener,noreferrer')" style="margin-left:2em;">ChatGPTを開く</button>
+    <button onclick="window.open('https://claude.ai', '_blank', 'noopener,noreferrer')">Claudeを開く</button>
+    <button onclick="window.open('https://gemini.google.com/', '_blank', 'noopener,noreferrer')">Geminiを開く</button>
+    <button onclick="window.open('https://copilot.microsoft.com', '_blank', 'noopener,noreferrer')">Copilotを開く</button>
+    <button onclick="window.open('https://www.genspark.ai', '_blank', 'noopener,noreferrer')">Gensparkを開く</button>
+  </div>
+</section>
+<section>
+  <h2>PowerPoint生成＆ダウンロード</h2>
+  <textarea class="codeinput" id="codeInput" placeholder="ここに pptxgenjs のコードを貼り付けてください"></textarea>
+  
+  <button id="runBtn">スライド生成（PPTXダウンロード）</button>
+  
+  <pre id="errorBox"></pre>
+  
+  <div id="saveArea">
+    <input type="text" id="slideTitle" placeholder="タイトル">
+    <button id="saveBtn">プロンプト＆スライド保存</button>
+  </div>
+  <!-- プレビューエリア（上部ダウンロードボタン → スライドビューワー → 下部ダウンロードボタン） -->
+  <div id="previewArea" style="display:none; margin-top:24px;">
+    <div id="previewDownloadTop"></div>
+    <div id="pptxViewer"></div>
+    <div id="previewDownloadBottom"></div>
+  </div>
+  <div id="savedList"></div>
+</section>
