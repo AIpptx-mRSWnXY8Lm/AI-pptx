@@ -1,13 +1,8 @@
 /**
- * sp_style.js
+ * /common/sp_style.js
  * ─────────────────────────────────────────────────
- * スマホ版専用スタイル。style.css の上からクラスを追加して上書きする。
+ * スマホ版専用スタイル。style.css の上から上書きする。
  * main.js / style.css / app.html は一切変更しない。
- *
- * ■ 方針
- *   - <style> タグをDOMに注入してCSSを適用
- *   - JS側でUIを再構成する必要があるものは setupSP() で処理
- *   - appReady イベント（main.jsと同じタイミング）を利用
  */
 
 (function () {
@@ -17,20 +12,17 @@
      1. スマホ専用 CSS を <head> に注入
   ══════════════════════════════════════════════ */
   var css = `
-/* ── sp_style.js が注入するスマホ専用スタイル ── */
+/* ── sp_style.js 注入スタイル ── */
 
-/* ベースリセット */
 body {
   padding: 10px !important;
   font-size: 16px;
   -webkit-text-size-adjust: 100%;
 }
 
-/* 見出し */
 h1 { font-size: 1.6em !important; }
 h2 { font-size: 1.25em !important; margin-top: 18px; }
 
-/* お知らせ欄 */
 .info { padding: 6px; }
 .infos { font-size: 1.1em !important; }
 
@@ -41,7 +33,7 @@ h2 { font-size: 1.25em !important; margin-top: 18px; }
   font-size: 12px !important;
 }
 
-/* テキストエリア（カスタム条件・スライド内容） */
+/* テキストエリア */
 textarea.promput {
   width: 100% !important;
   box-sizing: border-box;
@@ -69,7 +61,7 @@ button {
   touch-action: manipulation;
 }
 
-/* AIボタン群：縦並びに変更 */
+/* AIボタン群：2列折り返し */
 .AIbuttons {
   flex-wrap: wrap !important;
   gap: 6px !important;
@@ -80,7 +72,7 @@ button {
   min-width: 120px;
   font-size: 14px !important;
 }
-/* コピーボタンは幅いっぱい */
+/* コピーボタンは全幅・青 */
 .AIbuttons button:first-child {
   flex: 1 1 100% !important;
   background: #1e40af;
@@ -89,7 +81,7 @@ button {
   border-radius: 8px;
 }
 
-/* 実行ボタン：幅いっぱい・目立つ色 */
+/* 実行ボタン：全幅・目立つ青 */
 #runBtn {
   width: 100% !important;
   background: #1e40af !important;
@@ -99,7 +91,7 @@ button {
   font-size: 17px !important;
 }
 
-/* ダウンロードボタン（previewエリア内） */
+/* ダウンロードボタン */
 #previewDownloadTop button,
 #previewDownloadBottom button {
   width: 100% !important;
@@ -119,23 +111,13 @@ button {
   font-size: 16px !important;
   padding: 10px !important;
 }
-#saveBtn {
-  width: 100% !important;
-}
+#saveBtn { width: 100% !important; }
 
-/* プレビューエリア */
-#pptxViewer {
-  overflow-x: auto;
-}
-/* プレビュー内のビューワー：横スクロール許容 */
-#pptxViewer > div {
-  min-width: 0;
-}
+/* プレビューエリア：横スクロール許容 */
+#pptxViewer { overflow-x: auto; }
 
-/* 行番号エディタ：スマホでは行番号を非表示にして幅を節約 */
-#lineGutter {
-  display: none !important;
-}
+/* 行番号を非表示（幅節約） */
+#lineGutter { display: none !important; }
 #codeEditorWrapper textarea.codeinput {
   width: 100% !important;
   border: 1px solid #cbd5e1 !important;
@@ -158,26 +140,6 @@ button {
   font-size: 13px !important;
   padding: 8px 10px !important;
 }
-
-/* スマホ切替バナー */
-#sp-switch-banner {
-  background: #e0f2fe;
-  border: 1px solid #7dd3fc;
-  border-radius: 6px;
-  padding: 8px 12px;
-  margin-bottom: 10px;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-#sp-switch-banner a {
-  color: #0369a1;
-  white-space: nowrap;
-  font-weight: bold;
-  text-decoration: none;
-}
 `;
 
   var style = document.createElement("style");
@@ -187,88 +149,48 @@ button {
 
 
   /* ══════════════════════════════════════════════
-     2. DOM が揃ってから行うUI調整
+     2. プレビュービューワーをスマホ幅に合わせて調整
+        （router.js のバナーとは独立して動作）
   ══════════════════════════════════════════════ */
-  function setupSP() {
-    // ── 2-1. 「PC版で見る」バナーを最上部に挿入 ──
-    var app = document.getElementById("app");
-    if (app && !document.getElementById("sp-switch-banner")) {
-      // 現在のURLの sp ファイル名を PC ファイル名に置換したリンクを生成
-      var pcUrl = location.href
-        .replace(/0006_OiHbyxI_sp\.html/, "0006_OiHbyxI\.html")
-        .replace(/[?&]noredirect=1/, "");
-      // noredirect=1 を付けてPC版でrouter.jsが再リダイレクトしないようにする
-      pcUrl += (pcUrl.indexOf("?") >= 0 ? "&" : "?") + "noredirect=1";
+  function adjustViewer() {
+    var viewer = document.getElementById("pptxViewer");
+    if (!viewer) return;
 
-      var banner = document.createElement("div");
-      banner.id = "sp-switch-banner";
-      banner.innerHTML =
-        '<span>📱 スマホ版を表示中</span>' +
-        '<a href="' + pcUrl + '">PC版で見る →</a>';
-      app.insertBefore(banner, app.firstChild);
-    }
-
-    // ── 2-2. プレビュービューワーをスマホ向けにリサイズ ──
-    // sp_style.js は描画後もプレビューサイズを監視して調整する
-    function adjustViewer() {
-      var viewer = document.getElementById("pptxViewer");
-      if (!viewer) return;
-      var layout = viewer.querySelector("div[style*='display:flex']");
-      if (!layout) return;
-
-      var vw = window.innerWidth - 20; // padding分引く
-
-      // サイドバー（サムネイル列）をスマホでは非表示に
+    // サイドバー（サムネイル列）を非表示
+    var layout = viewer.querySelector("div");
+    if (layout && layout.style.display === "flex") {
       var sidebar = layout.firstElementChild;
-      if (sidebar) {
-        sidebar.style.display = "none";
-      }
-
-      // メインスライドコンテナをビューポート幅に合わせる
-      var mainArea = layout.lastElementChild;
-      if (mainArea) {
-        mainArea.style.padding = "8px";
-      }
-
-      var slideContainers = viewer.querySelectorAll("[style*='box-shadow']");
-      slideContainers.forEach(function (sc) {
-        var aspect = 420 / Math.round(420 * 6858000 / 12192000); // W/H 比
-        var newW = Math.min(vw - 16, 500);
-        var newH = Math.round(newW / aspect);
-        sc.style.width  = newW + "px";
-        sc.style.height = newH + "px";
-      });
+      if (sidebar) sidebar.style.display = "none";
     }
 
-    // プレビューが表示されたら調整（MutationObserverで監視）
+    // メインスライドをビューポート幅に合わせる
+    var vw = window.innerWidth - 24;
+    var containers = viewer.querySelectorAll("div[style*='box-shadow']");
+    containers.forEach(function (sc) {
+      var newW = Math.min(vw, 500);
+      var ratio = 12192000 / 6858000; // LAYOUT_WIDE の幅/高さ比
+      var newH = Math.round(newW / ratio);
+      sc.style.width  = newW + "px";
+      sc.style.height = newH + "px";
+    });
+  }
+
+  function setupSP() {
+    // previewArea の変化を監視してビューワーを調整
     var previewArea = document.getElementById("previewArea");
     if (previewArea) {
-      var mo = new MutationObserver(function (mutations) {
-        mutations.forEach(function (m) {
-          if (m.type === "attributes" && m.attributeName === "style") {
-            if (previewArea.style.display !== "none") {
-              setTimeout(adjustViewer, 100);
-            }
-          }
-          if (m.type === "childList") {
-            setTimeout(adjustViewer, 100);
-          }
-        });
-      });
-      mo.observe(previewArea, { attributes: true, childList: true, subtree: true });
+      new MutationObserver(function () {
+        if (previewArea.style.display !== "none") {
+          setTimeout(adjustViewer, 150);
+        }
+      }).observe(previewArea, { attributes: true, childList: true, subtree: true });
     }
-
     window.addEventListener("resize", adjustViewer);
   }
 
-  // appReady（main.js と同じタイミング）または DOMContentLoaded で実行
   document.addEventListener("appReady", setupSP, { once: true });
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", function () {
-      setTimeout(setupSP, 200);
-    }, { once: true });
-  } else {
-    setTimeout(setupSP, 200);
-  }
+  document.addEventListener("DOMContentLoaded", function () {
+    setTimeout(setupSP, 300);
+  }, { once: true });
 
 })();
