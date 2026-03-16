@@ -1,12 +1,18 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- ★ router.js を最初に読み込む（スマホからのアクセスをSP版に振り分け） -->
+  <script src="common/router.js"></script>
+
   <head prefix="og: https://ogp.me/ns#">
   <meta property="og:url" content="https://aipptx-mrswnxy8lm.github.io/AI-pptx/0006_OiHbyxI.html">
   <meta property="og:type" content="article">
-  <meta property="og:title" content="ﾃｽﾄAIスライド生成支援ツール⑥">
+  <meta property="og:title" content="AIスライド生成支援ツール①">
   <meta property="og:description" content="本サイトは、AIでスライドを生成したいと思っている方に、「無料で」「簡単に」「高品質な」「PowerPoint」を作ることをサポートするツールです。">
   <meta property="og:image" content="https://aipptx-mrswnxy8lm.github.io/AI-pptx/OGPimg.jpeg">
+
   <!-- Google tag -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-MESVNVQ731"></script>
   <script>
@@ -16,14 +22,10 @@
     gtag('config', 'G-MESVNVQ731');
   </script>
 
-  <meta charset="UTF-8">
-  <title>ﾃｽﾄAIスライド生成支援ツール⑥</title>
-
+  <title>ﾃｽﾄ-AIスライド生成支援ツール①</title>
   <link rel="icon" href="favicon.ico">
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
-  <!-- ★ router.js: スマホからのアクセスをスマホ版に振り分け -->
-  <script src="router.js"></script>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="common/style.css">
 </head>
 <body>
 <header style="background:#CCFFFF;"><h2>ﾃｽﾄAIスライド生成支援ツール⑥ (自分用)</h2></header>
@@ -31,48 +33,18 @@
 
 <script>
 fetch("common/app.html")
-.then(r => r.text())
-.then(html => {
-  document.getElementById("app").innerHTML = html;
-
-  const script = document.createElement("script");
-  script.src = "main.js";
-  document.body.appendChild(script);
-
-  // PC版に「スマホ版で見る」バナーを挿入
-  const app = document.getElementById("app");
-  if (app && !document.getElementById("pc-switch-banner")) {
-    const spUrl = location.href
-      .replace(/0006_OiHbyxI\.html/, "0006_OiHbyxI\.html")
-      .replace(/[?&]noredirect=1/, "");
-    const spUrlFinal = spUrl + (spUrl.indexOf("?") >= 0 ? "&" : "?") + "noredirect=1";
-
-    const banner = document.createElement("div");
-    banner.id = "pc-switch-banner";
-    banner.style.cssText = [
-      "background:#e0f2fe",
-      "border:1px solid #7dd3fc",
-      "border-radius:6px",
-      "padding:8px 12px",
-      "margin-bottom:10px",
-      "font-size:13px",
-      "display:flex",
-      "align-items:center",
-      "justify-content:space-between",
-      "gap:8px"
-    ].join(";");
-    banner.innerHTML =
-      '<span>🖥️ PC版を表示中</span>' +
-      '<a href="' + spUrlFinal + '" style="color:#0369a1;white-space:nowrap;font-weight:bold;text-decoration:none;">スマホ版で見る →</a>';
-    app.insertBefore(banner, app.firstChild);
-  }
-});
+  .then(r => r.text())
+  .then(html => {
+    document.getElementById("app").innerHTML = html;
+    const script = document.createElement("script");
+    script.src = "common/main.js";
+    document.body.appendChild(script);
+  });
 </script>
 
 <!-- pptxgenjs -->
 <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
 <!-- JSZip: PPTXプレビュー用 -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-
 </body>
 </html>
